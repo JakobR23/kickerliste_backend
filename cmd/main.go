@@ -1,17 +1,19 @@
 package main
 
 import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
+	"bierliste_backend/env"
+	"bierliste_backend/internal/database"
+	"bierliste_backend/internal/router"
+	"fmt"
 )
 
 func main() {
-	router := gin.Default()
-	router.GET("/", test)
-	router.Run()
-}
-
-func test(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, "test")
+	env.LoadConfig()
+	database.InitializeConnection()
+	router := router.New()
+	host := fmt.Sprintf("%s:%s",
+		env.Host.GetValue(),
+		env.Port.GetValue())
+	router.Run(host)
+	router.Run("localhost:8080")
 }
