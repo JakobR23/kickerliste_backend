@@ -1,0 +1,540 @@
+openapi: 3.0.3
+info:
+  title: Bierliste Backend API
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: users
+  - name: teams
+  - name: fixtures
+
+paths:
+
+  # ------------------------------------------------------------------ users
+
+  /users:
+    get:
+      tags: [users]
+      summary: List all users with their total scores
+      operationId: listUsers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+    post:
+      tags: [users]
+      summary: Register a new user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [users]
+      summary: Get a user by ID
+      operationId: getUser
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [users]
+      summary: Update a user's username
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [users]
+      summary: Delete a user
+      operationId: deleteUser
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------------------ teams
+
+  /teams:
+    get:
+      tags: [teams]
+      summary: List all teams
+      operationId: listTeams
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+
+    post:
+      tags: [teams]
+      summary: Create a team
+      operationId: createTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /teams/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [teams]
+      summary: Get a team by ID
+      operationId: getTeam
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [teams]
+      summary: Update a team's name
+      operationId: updateTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [teams]
+      summary: Delete a team (cascades to team_member rows)
+      operationId: deleteTeam
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /teams/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [teams]
+      summary: List members of a team
+      operationId: listTeamMembers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [teams]
+      summary: Add a user to a team (max 2 members enforced at application layer)
+      operationId: addTeamMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTeamMemberRequest"
+      responses:
+        "201":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: User already on team or team is full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /teams/{id}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    delete:
+      tags: [teams]
+      summary: Remove a user from a team
+      operationId: removeTeamMember
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------- fixtures
+
+  /fixtures:
+    get:
+      tags: [fixtures]
+      summary: List all fixtures
+      operationId: listFixtures
+      parameters:
+        - name: teamId
+          in: query
+          required: false
+          description: Filter fixtures that involve this team (either side)
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fixture"
+
+    post:
+      tags: [fixtures]
+      summary: Record a new fixture
+      operationId: createFixture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFixtureRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fixture"
+        "422":
+          description: Validation error (e.g. same team on both sides, negative value)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /fixtures/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [fixtures]
+      summary: Get a fixture by ID
+      operationId: getFixture
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fixture"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [fixtures]
+      summary: Update a fixture (result, scores, value)
+      operationId: updateFixture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFixtureRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fixture"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [fixtures]
+      summary: Delete a fixture
+      operationId: deleteFixture
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ======================================================= components
+
+components:
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+
+    # ---- domain types
+
+    MatchResult:
+      type: string
+      enum: [team_1, team_2, draw]
+
+    # ---- entities (read models)
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+        totalScore:
+          type: integer
+          readOnly: true
+          description: Derived from the user_total_score view; not stored on the row
+      required: [id, username, totalScore]
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required: [id, created_at]
+
+    Fixture:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team1Id:
+          type: integer
+        team2Id:
+          type: integer
+        result:
+          $ref: "#/components/schemas/MatchResult"
+        team1Score:
+          type: integer
+          nullable: true
+        team2Score:
+          type: integer
+          nullable: true
+        playedAt:
+          type: string
+          format: date-time
+        value:
+          type: integer
+          minimum: 0
+      required: [id, team1Id, team2Id, result, playedAt, value]
+
+    # ---- request bodies
+
+    CreateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+      required: [username, password]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required: [username]
+
+    CreateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+
+    AddTeamMemberRequest:
+      type: object
+      properties:
+        userId:
+          type: integer
+      required: [userId]
+
+    CreateFixtureRequest:
+      type: object
+      properties:
+        team1Id:
+          type: integer
+        team2Id:
+          type: integer
+        result:
+          $ref: "#/components/schemas/MatchResult"
+        team1Score:
+          type: integer
+          nullable: true
+          minimum: 0
+        team2Score:
+          type: integer
+          nullable: true
+          minimum: 0
+        playedAt:
+          type: string
+          format: date-time
+        value:
+          type: integer
+          minimum: 0
+      required: [team1Id, team2Id, result, value]
+
+    UpdateFixtureRequest:
+      type: object
+      properties:
+        result:
+          $ref: "#/components/schemas/MatchResult"
+        team1Score:
+          type: integer
+          nullable: true
+          minimum: 0
+        team2Score:
+          type: integer
+          nullable: true
+          minimum: 0
+        value:
+          type: integer
+          minimum: 0
+
+    # ---- error envelope
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
