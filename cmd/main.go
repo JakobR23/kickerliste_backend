@@ -12,12 +12,15 @@ import (
 	teamRepo "bierliste_backend/internal/team"
 	"bierliste_backend/internal/teammember"
 	userRepo "bierliste_backend/internal/user"
+	"bierliste_backend/migrations"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	env.LoadConfig()
+
+	database.RunMigrations(migrations.FS)
 
 	conn := database.InitializeConnection()
 	defer conn.Close(context.Background())
@@ -38,9 +41,7 @@ func main() {
 	fixtureService := fixtureRepo.NewService(fixtures)
 
 	r := router.New(
-		// Public: login endpoint — no token required
 		func(rg *gin.RouterGroup) { auth.RegisterHandlers(rg, authService) },
-		// Protected: all other endpoints require a valid Bearer token
 		func(rg *gin.RouterGroup) {
 			protected := rg.Group("", authMiddleware)
 			userRepo.RegisterHandlers(protected, userService)
