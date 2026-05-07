@@ -18,7 +18,7 @@ func NewRepository(db *database.DB) *Repository {
 
 func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
 	rows, err := r.db.With(ctx).Query(ctx,
-		`SELECT id, username, total_score FROM user_total_score ORDER BY id`)
+		`SELECT id, username, role::text, total_score FROM user_total_score ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -27,9 +27,11 @@ func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
 	var users []entity.User
 	for rows.Next() {
 		var u entity.User
-		if err := rows.Scan(&u.Id, &u.Username, &u.TotalScore); err != nil {
+		var role string
+		if err := rows.Scan(&u.Id, &u.Username, &role, &u.TotalScore); err != nil {
 			return nil, err
 		}
+		u.Role = entity.Role(role)
 		users = append(users, u)
 	}
 	return users, rows.Err()
@@ -37,12 +39,14 @@ func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
 
 func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
 	var u entity.User
+	var role string
 	err := r.db.With(ctx).QueryRow(ctx,
-		`SELECT id, username, total_score FROM user_total_score WHERE id = $1`, id).
-		Scan(&u.Id, &u.Username, &u.TotalScore)
+		`SELECT id, username, role::text, total_score FROM user_total_score WHERE id = $1`, id).
+		Scan(&u.Id, &u.Username, &role, &u.TotalScore)
 	if err != nil {
 		return entity.User{}, err
 	}
+	u.Role = entity.Role(role)
 	return u, nil
 }
 
@@ -50,21 +54,21 @@ func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
 // Queries the base table directly (not the view) to retrieve password and hashsalt.
 func (r *Repository) GetByUsername(ctx context.Context, username string) (entity.User, error) {
 	var id, totalScore int
-	var uname, password, hashsalt string
+	var uname, role, password, hashsalt string
 	err := r.db.With(ctx).QueryRow(ctx, `
-		SELECT u.id, u.username, u.password, u.hashsalt,
+		SELECT u.id, u.username, u.role::text, u.password, u.hashsalt,
 		       COALESCE(SUM(f.value), 0) AS total_score
 		FROM "user" u
 		LEFT JOIN team_member tm ON tm.user_id = u.id
 		LEFT JOIN fixture f ON (f.team_1_id = tm.team_id AND f.result = 'team_1')
 		                    OR (f.team_2_id = tm.team_id AND f.result = 'team_2')
 		WHERE u.username = $1
-		GROUP BY u.id, u.username, u.password, u.hashsalt`, username).
-		Scan(&id, &uname, &password, &hashsalt, &totalScore)
+		GROUP BY u.id, u.username, u.role, u.password, u.hashsalt`, username).
+		Scan(&id, &uname, &role, &password, &hashsalt, &totalScore)
 	if err != nil {
 		return entity.User{}, err
 	}
-	return entity.NewUser(id, uname, password, hashsalt, totalScore), nil
+	return entity.NewUser(id, uname, entity.Role(role), password, hashsalt, totalScore), nil
 }
 
 func (r *Repository) Create(ctx context.Context, username, password string) (entity.User, error) {

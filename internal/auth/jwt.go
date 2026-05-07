@@ -14,8 +14,9 @@ const tokenTTL = 24 * time.Hour
 
 // Claims are the fields embedded inside each JWT.
 type Claims struct {
-	UserId   int    `json:"userId"`
-	Username string `json:"username"`
+	UserId   int         `json:"userId"`
+	Username string      `json:"username"`
+	Role     entity.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -24,6 +25,7 @@ func generateToken(u entity.User, secret string) (string, error) {
 	claims := Claims{
 		UserId:   u.Id,
 		Username: u.Username,
+		Role:     u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
