@@ -21,6 +21,7 @@ const (
 	Host             EnvKey = "HOST"
 	Port             EnvKey = "PORT"
 	HashsaltLength   EnvKey = "HASHSALT_LENGTH"
+	JWTSecret        EnvKey = "JWT_SECRET"
 )
 
 func LoadConfig() {

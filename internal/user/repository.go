@@ -2,12 +2,10 @@ package user
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 
 	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
+	"bierliste_backend/internal/hash"
 )
 
 type Repository struct {
@@ -48,14 +46,35 @@ func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
 	return u, nil
 }
 
+// GetByUsername fetches a user with full credentials for authentication.
+// Queries the base table directly (not the view) to retrieve password and hashsalt.
+func (r *Repository) GetByUsername(ctx context.Context, username string) (entity.User, error) {
+	var id, totalScore int
+	var uname, password, hashsalt string
+	err := r.db.With(ctx).QueryRow(ctx, `
+		SELECT u.id, u.username, u.password, u.hashsalt,
+		       COALESCE(SUM(f.value), 0) AS total_score
+		FROM "user" u
+		LEFT JOIN team_member tm ON tm.user_id = u.id
+		LEFT JOIN fixture f ON (f.team_1_id = tm.team_id AND f.result = 'team_1')
+		                    OR (f.team_2_id = tm.team_id AND f.result = 'team_2')
+		WHERE u.username = $1
+		GROUP BY u.id, u.username, u.password, u.hashsalt`, username).
+		Scan(&id, &uname, &password, &hashsalt, &totalScore)
+	if err != nil {
+		return entity.User{}, err
+	}
+	return entity.NewUser(id, uname, password, hashsalt, totalScore), nil
+}
+
 func (r *Repository) Create(ctx context.Context, username, password string) (entity.User, error) {
-	salt := generateSalt()
-	hash := hashPassword(password, salt)
+	salt := hash.GenerateSalt()
+	hashed := hash.Password(password, salt)
 
 	var id int
 	err := r.db.With(ctx).QueryRow(ctx,
 		`INSERT INTO "user" (username, password, hashsalt) VALUES ($1, $2, $3) RETURNING id`,
-		username, hash, salt).Scan(&id)
+		username, hashed, salt).Scan(&id)
 	if err != nil {
 		return entity.User{}, err
 	}
@@ -74,15 +93,4 @@ func (r *Repository) Update(ctx context.Context, id int, username string) (entit
 func (r *Repository) Delete(ctx context.Context, id int) error {
 	_, err := r.db.With(ctx).Exec(ctx, `DELETE FROM "user" WHERE id = $1`, id)
 	return err
-}
-
-func generateSalt() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-func hashPassword(password, salt string) string {
-	h := sha256.Sum256([]byte(password + salt))
-	return hex.EncodeToString(h[:])
 }
