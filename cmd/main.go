@@ -6,11 +6,13 @@ import (
 
 	"bierliste_backend/env"
 	"bierliste_backend/internal/database"
-	"bierliste_backend/internal/fixture"
+	fixtureRepo "bierliste_backend/internal/fixture"
 	"bierliste_backend/internal/router"
-	"bierliste_backend/internal/team"
+	teamRepo "bierliste_backend/internal/team"
 	"bierliste_backend/internal/teammember"
-	"bierliste_backend/internal/user"
+	userRepo "bierliste_backend/internal/user"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -21,12 +23,21 @@ func main() {
 
 	db := database.New(conn)
 
-	_ = user.NewRepository(db)
-	_ = team.NewRepository(db)
-	_ = teammember.NewRepository(db)
-	_ = fixture.NewRepository(db)
+	users := userRepo.NewRepository(db)
+	teams := teamRepo.NewRepository(db)
+	tms := teammember.NewRepository(db)
+	fixtures := fixtureRepo.NewRepository(db)
 
-	r := router.New()
+	userService := userRepo.NewService(users)
+	teamService := teamRepo.NewService(teams, tms, users)
+	fixtureService := fixtureRepo.NewService(fixtures)
+
+	r := router.New(
+		func(rg *gin.RouterGroup) { userRepo.RegisterHandlers(rg, userService) },
+		func(rg *gin.RouterGroup) { teamRepo.RegisterHandlers(rg, teamService) },
+		func(rg *gin.RouterGroup) { fixtureRepo.RegisterHandlers(rg, fixtureService) },
+	)
+
 	host := fmt.Sprintf("%s:%s", env.Host.GetValue(), env.Port.GetValue())
 	r.Run(host)
 }
