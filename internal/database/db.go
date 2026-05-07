@@ -2,11 +2,16 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 
 	"bierliste_backend/env"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -31,18 +36,50 @@ func New(conn *pgx.Conn) *DB {
 	return &DB{conn: conn}
 }
 
-// InitializeConnection opens and returns a new database connection.
-func InitializeConnection() *pgx.Conn {
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s",
+// connStr builds the base postgres:// connection string from environment variables.
+func connStr() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		env.DatabaseUser.GetValue(),
 		env.DatabasePassword.GetValue(),
 		env.DatabaseHost.GetValue(),
-		env.DatabasePort.GetValue())
-	conn, err := pgx.Connect(context.Background(), connStr)
+		env.DatabasePort.GetValue(),
+		env.DatabaseName.GetValue())
+}
+
+// InitializeConnection opens and returns a new database connection.
+func InitializeConnection() *pgx.Conn {
+	conn, err := pgx.Connect(context.Background(), connStr())
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
 	return conn
+}
+
+// RunMigrations applies all pending up-migrations embedded in migrationsFS.
+// It is a no-op if the schema is already up to date.
+func RunMigrations(migrationsFS fs.FS) {
+	d, err := iofs.New(migrationsFS, ".")
+	if err != nil {
+		log.Fatalf("migration source error: %v", err)
+	}
+
+	// golang-migrate's pgx v5 driver uses the pgx5:// scheme.
+	dbURL := fmt.Sprintf("pgx5://%s:%s@%s:%s/%s",
+		env.DatabaseUser.GetValue(),
+		env.DatabasePassword.GetValue(),
+		env.DatabaseHost.GetValue(),
+		env.DatabasePort.GetValue(),
+		env.DatabaseName.GetValue())
+
+	m, err := migrate.NewWithSourceInstance("iofs", d, dbURL)
+	if err != nil {
+		log.Fatalf("migration init error: %v", err)
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		log.Fatalf("migration failed: %v", err)
+	}
 }
 
 // With returns the active transaction stored in ctx, or the base connection

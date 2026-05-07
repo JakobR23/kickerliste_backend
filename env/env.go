@@ -18,6 +18,7 @@ const (
 	DatabasePassword EnvKey = "DB_PASSWORD"
 	DatabaseHost     EnvKey = "DB_HOST"
 	DatabasePort     EnvKey = "DB_PORT"
+	DatabaseName     EnvKey = "DB_NAME"
 	Host             EnvKey = "HOST"
 	Port             EnvKey = "PORT"
 	HashsaltLength   EnvKey = "HASHSALT_LENGTH"
