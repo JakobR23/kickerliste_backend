@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"sort"
+	"strings"
 
 	"bierliste_backend/env"
 
@@ -56,14 +58,10 @@ func InitializeConnection() *pgx.Conn {
 }
 
 // RunMigrations applies all pending up-migrations embedded in migrationsFS.
-// It is a no-op if the schema is already up to date.
+// If the database is left in a dirty or otherwise corrupt state from a previous
+// failed run, it repairs automatically by executing the down migrations directly
+// via raw SQL and retrying.
 func RunMigrations(migrationsFS fs.FS) {
-	d, err := iofs.New(migrationsFS, ".")
-	if err != nil {
-		log.Fatalf("migration source error: %v", err)
-	}
-
-	// golang-migrate's pgx v5 driver uses the pgx5:// scheme.
 	dbURL := fmt.Sprintf("pgx5://%s:%s@%s:%s/%s",
 		env.DatabaseUser.GetValue(),
 		env.DatabasePassword.GetValue(),
@@ -71,15 +69,88 @@ func RunMigrations(migrationsFS fs.FS) {
 		env.DatabasePort.GetValue(),
 		env.DatabaseName.GetValue())
 
-	m, err := migrate.NewWithSourceInstance("iofs", d, dbURL)
-	if err != nil {
-		log.Fatalf("migration init error: %v", err)
+	newMigrate := func() *migrate.Migrate {
+		d, err := iofs.New(migrationsFS, ".")
+		if err != nil {
+			log.Fatalf("migration source error: %v", err)
+		}
+		m, err := migrate.NewWithSourceInstance("iofs", d, dbURL)
+		if err != nil {
+			log.Fatalf("migration init error: %v", err)
+		}
+		return m
 	}
+
+	m := newMigrate()
 	defer m.Close()
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatalf("migration failed: %v", err)
+		var dirtyErr migrate.ErrDirty
+		if errors.As(err, &dirtyErr) {
+			log.Printf("dirty migration at version %d — repairing", dirtyErr.Version)
+		} else {
+			log.Printf("migration error (%v) — attempting repair", err)
+		}
+
+		if err := repairMigrations(migrationsFS); err != nil {
+			log.Fatalf("migration repair failed: %v", err)
+		}
+
+		// Fresh instance so the internal source/DB state is clean.
+		m2 := newMigrate()
+		defer m2.Close()
+
+		if err := m2.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			log.Fatalf("migration failed after repair: %v", err)
+		}
 	}
+}
+
+// repairMigrations brings the database back to a clean baseline by running every
+// down migration (highest version first) via raw SQL, then clearing schema_migrations.
+// All down statements use IF EXISTS so the function is safe to call regardless of
+// how much of the schema was actually applied.
+func repairMigrations(migrationsFS fs.FS) error {
+	ctx := context.Background()
+
+	conn, err := pgx.Connect(ctx, connStr())
+	if err != nil {
+		return fmt.Errorf("repair: connect: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	entries, err := fs.ReadDir(migrationsFS, ".")
+	if err != nil {
+		return fmt.Errorf("repair: list migrations: %w", err)
+	}
+
+	// Collect down-migration filenames and sort highest-version first.
+	var downFiles []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".down.sql") {
+			downFiles = append(downFiles, e.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(downFiles)))
+
+	for _, name := range downFiles {
+		sql, err := fs.ReadFile(migrationsFS, name)
+		if err != nil {
+			return fmt.Errorf("repair: read %s: %w", name, err)
+		}
+		if _, err := conn.Exec(ctx, string(sql)); err != nil {
+			// Objects may not exist if the migration never completed — log and continue.
+			log.Printf("repair: %s: %v", name, err)
+		}
+	}
+
+	// Reset migration tracking. The table itself may not exist on a very first run,
+	// so ignore errors here.
+	if _, err := conn.Exec(ctx, `DELETE FROM schema_migrations`); err != nil {
+		log.Printf("repair: clear schema_migrations: %v", err)
+	}
+
+	return nil
 }
 
 // With returns the active transaction stored in ctx, or the base connection
