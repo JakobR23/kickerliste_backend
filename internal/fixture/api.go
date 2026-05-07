@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"bierliste_backend/internal/auth"
 	"bierliste_backend/internal/httputil"
 
 	"github.com/gin-gonic/gin"
@@ -61,13 +62,16 @@ func (r resource) get(c *gin.Context) {
 }
 
 // create handles POST /fixtures
+// The fixture is created with status 'pending' and attributed to the caller.
 func (r resource) create(c *gin.Context) {
+	submittedBy := c.MustGet(auth.UserIDKey).(int)
+
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	f, err := r.service.Create(c.Request.Context(), req)
+	f, err := r.service.Create(c.Request.Context(), submittedBy, req)
 	if err != nil {
 		if errors.Is(err, ErrSameTeam) || errors.Is(err, ErrScoresInconsistent) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})

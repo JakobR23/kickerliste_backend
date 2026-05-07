@@ -12,13 +12,23 @@ const (
 	Draw  MatchResult = "draw"
 )
 
+type FixtureStatus string
+
+const (
+	StatusPending  FixtureStatus = "pending"
+	StatusApproved FixtureStatus = "approved"
+	StatusRejected FixtureStatus = "rejected"
+)
+
 type Fixture struct {
-	Id         int         `json:"id"`
-	Team1Id    int         `json:"team1Id"`
-	Team2Id    int         `json:"team2Id"`
-	Result     MatchResult `json:"result"`
-	Team1Score *int      `json:"team1Score"`
-	Team2Score *int      `json:"team2Score"`
-	PlayedAt   time.Time `json:"playedAt"`
-	Value      int       `json:"value"`
+	Id          int           `json:"id"`
+	Team1Id     int           `json:"team1Id"`
+	Team2Id     int           `json:"team2Id"`
+	Result      MatchResult   `json:"result"`
+	Team1Score  *int          `json:"team1Score"`
+	Team2Score  *int          `json:"team2Score"`
+	PlayedAt    time.Time     `json:"playedAt"`
+	Value       int           `json:"value"`
+	Status      FixtureStatus `json:"status"`
+	SubmittedBy *int          `json:"submittedBy"`
 }
