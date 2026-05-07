@@ -83,7 +83,7 @@ func RunMigrations(migrationsFS fs.FS) {
 			// A previous run failed mid-migration, leaving the version flagged dirty.
 			// Force the version back to the last clean state so Up can re-apply it.
 			log.Printf("dirty migration detected at version %d — resetting to force clean re-run", dirtyErr.Version)
-			if err := m.Force(dirtyErr.Version - 1); err != nil {
+			if err := m.Force(-1); err != nil {
 				log.Fatalf("migration force failed: %v", err)
 			}
 			if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
