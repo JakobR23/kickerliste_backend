@@ -10,6 +10,9 @@ import (
 // UserIDKey is the gin.Context key under which the authenticated user's ID is stored.
 const UserIDKey = "userId"
 
+// UserRoleKey is the gin.Context key under which the authenticated user's role is stored.
+const UserRoleKey = "userRole"
+
 // Middleware returns a Gin handler that validates the Bearer JWT on every request.
 // On success it stores the user ID in the context under UserIDKey and calls Next.
 // On failure it aborts with 401.
@@ -34,6 +37,7 @@ func Middleware(secret string) gin.HandlerFunc {
 		}
 
 		c.Set(UserIDKey, claims.UserId)
+		c.Set(UserRoleKey, claims.Role)
 		c.Next()
 	}
 }
