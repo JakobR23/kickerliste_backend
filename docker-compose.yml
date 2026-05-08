@@ -1,0 +1,49 @@
+services:
+
+  postgres:
+    # Only started when the "postgres" profile is active:
+    #   docker compose --profile postgres up
+    # Omit the profile flag when postgres is already running externally.
+    profiles: ["postgres"]
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "${DB_PORT:-5431}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: .
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      # All app variables are injected from the root .env into the container
+      # environment. Copy .env.example to .env and fill in real values.
+      # env/.env is used for local "go run" development only.
+      - ./.env
+    environment:
+      # DB_HOST is always "postgres" inside the container. extra_hosts below
+      # ensures the name resolves whether or not the postgres profile is active.
+      DB_HOST: postgres
+    extra_hosts:
+      # Maps "postgres" to the host machine when the postgres profile is not
+      # active (i.e. postgres is running directly on the host). When the
+      # postgres profile is active, Docker's service DNS takes precedence and
+      # this entry is ignored.
+      - "postgres:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false  # ignored when postgres is not managed by this compose file
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

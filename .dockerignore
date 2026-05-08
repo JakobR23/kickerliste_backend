@@ -1,0 +1,11 @@
+# Secrets — never bake into the image; supply at runtime via environment
+env/.env
+
+# Version control
+.git
+
+# Local agent instructions
+instructions/
+
+# Misc
+*.md

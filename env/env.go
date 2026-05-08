@@ -54,18 +54,39 @@ func IsDevelopment() bool {
 	return AppEnv.GetValue() == "development"
 }
 
+// LoadConfig reads key=value pairs from ./env/.env and sets any that are not
+// already present in the environment. Variables already set (e.g. injected by
+// Docker Compose) take precedence over file values, so this is safe to call
+// in both local and containerised environments.
+//
+// If the file does not exist the function logs a warning and returns — the
+// application can still start as long as all required variables were supplied
+// through the environment directly.
 func LoadConfig() {
 	file, err := os.OpenFile("./env/.env", os.O_RDONLY, os.ModePerm)
 	if err != nil {
-		log.Fatalf("unable to read file %v", err)
+		if os.IsNotExist(err) {
+			return
+		}
+		log.Fatalf("unable to read env/.env: %v", err)
 	}
 	defer file.Close()
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		pair := strings.SplitN(scanner.Text(), "=", 2)
-		os.Setenv(pair[0], pair[1])
+		line := scanner.Text()
+		pair := strings.SplitN(line, "=", 2)
+		if len(pair) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(pair[0])
+		// Only set the variable if it has not already been provided by the
+		// environment (e.g. via Docker Compose or a shell export).
+		if _, already := os.LookupEnv(key); !already {
+			os.Setenv(key, pair[1])
+		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatalf("scan file error: %v", err)
+		log.Fatalf("env/.env scan error: %v", err)
 	}
 }
