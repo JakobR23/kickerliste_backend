@@ -1,6 +1,10 @@
 services:
 
   postgres:
+    # Only started when the "postgres" profile is active:
+    #   docker compose --profile postgres up
+    # Omit the profile flag when postgres is already running externally.
+    profiles: ["postgres"]
     image: postgres:18
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-bierliste}
@@ -31,6 +35,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false  # ignored when postgres is not managed by this compose file
     restart: unless-stopped
 
 volumes:
