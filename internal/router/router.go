@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"bierliste_backend/env"
+	"bierliste_backend/internal/logger"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -17,7 +18,7 @@ type RegisterFunc func(rg *gin.RouterGroup)
 // All routes are mounted under /api/v1.
 // Pass one RegisterFunc per domain to mount its routes.
 func New(registrars ...RegisterFunc) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
 
 	// Trust no proxies — use the direct connection's remote address as the
 	// client IP. If a reverse proxy (nginx, Traefik, etc.) is added in front
@@ -25,17 +26,20 @@ func New(registrars ...RegisterFunc) *gin.Engine {
 	// that X-Forwarded-For headers are read correctly.
 	r.SetTrustedProxies(nil) //nolint:errcheck
 
+	r.Use(
+		cors.New(cors.Config{
+			AllowOrigins:     env.GetAllowedOrigins(),
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Authorization", "Content-Type"},
+			ExposeHeaders:    []string{"Content-Length"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+		}),
+		logger.RequestLogger(),
+		logger.Recovery(),
+	)
+
 	v1 := r.Group("/api/v1")
-
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     env.GetAllowedOrigins(),
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
 	for _, register := range registrars {
 		register(v1)
 	}

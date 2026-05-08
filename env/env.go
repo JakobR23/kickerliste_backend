@@ -2,7 +2,7 @@ package env
 
 import (
 	"bufio"
-	"log"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -28,6 +28,9 @@ const (
 	// policy, e.g. "http://localhost:3000,https://app.example.com".
 	// Defaults to "http://localhost:3000" when not set.
 	AllowedOrigins EnvKey = "ALLOWED_ORIGINS"
+	// LogLevel sets the minimum log level (debug, info, warn, error).
+	// Defaults to "info" when not set.
+	LogLevel EnvKey = "LOG_LEVEL"
 )
 
 // GetAllowedOrigins returns the list of permitted CORS origins.
@@ -68,7 +71,8 @@ func LoadConfig() {
 		if os.IsNotExist(err) {
 			return
 		}
-		log.Fatalf("unable to read env/.env: %v", err)
+		fmt.Fprintf(os.Stderr, "unable to read env/.env: %v\n", err)
+		os.Exit(1)
 	}
 	defer file.Close()
 
@@ -87,6 +91,7 @@ func LoadConfig() {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatalf("env/.env scan error: %v", err)
+		fmt.Fprintf(os.Stderr, "env/.env scan error: %v\n", err)
+		os.Exit(1)
 	}
 }

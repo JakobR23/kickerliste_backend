@@ -8,6 +8,7 @@ import (
 	"bierliste_backend/internal/auth"
 	"bierliste_backend/internal/database"
 	fixtureRepo "bierliste_backend/internal/fixture"
+	"bierliste_backend/internal/logger"
 	"bierliste_backend/internal/router"
 	adjustmentRepo "bierliste_backend/internal/scoreadjustment"
 	teamRepo "bierliste_backend/internal/team"
@@ -20,6 +21,7 @@ import (
 
 func main() {
 	env.LoadConfig()
+	logger.Setup()
 
 	database.RunMigrations(migrations.FS)
 
