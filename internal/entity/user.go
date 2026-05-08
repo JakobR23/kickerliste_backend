@@ -12,10 +12,10 @@ const (
 // hashsalt) and the force_password_change flag are unexported so they are
 // never accidentally serialised in HTTP responses.
 type User struct {
-	Id         int    `json:"id"`
-	Username   string `json:"username"`
-	Role       Role   `json:"role"`
-	TotalScore int    `json:"totalScore"`
+	Id         int     `json:"id"`
+	Username   string  `json:"username"`
+	Role       Role    `json:"role"`
+	TotalScore float64 `json:"totalScore"`
 	password   string
 	hashsalt   string
 	// ForcePasswordChange signals that the user must change their password
@@ -31,7 +31,7 @@ func (u User) GetHashsalt() string { return u.hashsalt }
 // NewUser constructs a fully-populated User including the credential fields.
 // Intended for use by the repository layer when loading rows that include
 // password, hashsalt, and force_password_change (e.g. for authentication).
-func NewUser(id int, username string, role Role, password, hashsalt string, totalScore int, forcePasswordChange bool) User {
+func NewUser(id int, username string, role Role, password, hashsalt string, totalScore float64, forcePasswordChange bool) User {
 	return User{
 		Id:                  id,
 		Username:            username,

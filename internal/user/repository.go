@@ -51,22 +51,19 @@ func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
 }
 
 // GetByUsername fetches a user with full credentials for authentication.
-// Queries the base table directly (not the view) to retrieve password, hashsalt,
-// and force_password_change.
+// Joins the user_total_score view for a consistent score calculation.
 func (r *Repository) GetByUsername(ctx context.Context, username string) (entity.User, error) {
-	var id, totalScore int
+	var id int
+	var totalScore float64
 	var uname, role, password, hashsalt string
 	var forcePasswordChange bool
 	err := r.db.With(ctx).QueryRow(ctx, `
 		SELECT u.id, u.username, u.role::text, u.password, u.hashsalt,
 		       u.force_password_change,
-		       COALESCE(SUM(f.value), 0) AS total_score
+		       COALESCE(v.total_score, 0) AS total_score
 		FROM "user" u
-		LEFT JOIN team_member tm ON tm.user_id = u.id
-		LEFT JOIN fixture f ON (f.team_1_id = tm.team_id AND f.result = 'team_1')
-		                    OR (f.team_2_id = tm.team_id AND f.result = 'team_2')
-		WHERE u.username = $1
-		GROUP BY u.id, u.username, u.role, u.password, u.hashsalt, u.force_password_change`,
+		LEFT JOIN user_total_score v ON v.id = u.id
+		WHERE u.username = $1`,
 		username).
 		Scan(&id, &uname, &role, &password, &hashsalt, &forcePasswordChange, &totalScore)
 	if err != nil {
