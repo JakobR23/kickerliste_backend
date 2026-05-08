@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"bierliste_backend/internal/entity"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,6 +40,19 @@ func Middleware(secret string) gin.HandlerFunc {
 
 		c.Set(UserIDKey, claims.UserId)
 		c.Set(UserRoleKey, claims.Role)
+		c.Next()
+	}
+}
+
+// AdminMiddleware aborts with 403 if the authenticated user does not have the
+// admin role. Must be chained after Middleware, which sets UserRoleKey.
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, _ := c.Get(UserRoleKey)
+		if role != entity.RoleAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "admin access required"})
+			return
+		}
 		c.Next()
 	}
 }
