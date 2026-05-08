@@ -8,6 +8,7 @@ import (
 	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/hash"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -154,5 +155,5 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 // isUniqueViolation reports whether err is a PostgreSQL unique-constraint violation.
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
