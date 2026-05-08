@@ -27,6 +27,16 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	fixtures.DELETE("/:id", r.delete)
 }
 
+// RegisterAdminHandlers mounts the fixture routes restricted to admins.
+// rg must already have AdminMiddleware applied.
+func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
+	r := resource{service}
+
+	fixtures := rg.Group("/fixtures")
+	fixtures.PATCH("/:id/approve", r.approve)
+	fixtures.PATCH("/:id/reject", r.reject)
+}
+
 // list handles GET /fixtures?teamId=<int>
 func (r resource) list(c *gin.Context) {
 	var teamId *int
@@ -117,4 +127,40 @@ func (r resource) delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// approve handles PATCH /fixtures/:id/approve (admin only)
+func (r resource) approve(c *gin.Context) {
+	id, ok := httputil.ParseID(c)
+	if !ok {
+		return
+	}
+	f, err := r.service.Approve(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrFixtureNotPending) {
+			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+			return
+		}
+		httputil.HandleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, f)
+}
+
+// reject handles PATCH /fixtures/:id/reject (admin only)
+func (r resource) reject(c *gin.Context) {
+	id, ok := httputil.ParseID(c)
+	if !ok {
+		return
+	}
+	f, err := r.service.Reject(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrFixtureNotPending) {
+			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+			return
+		}
+		httputil.HandleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, f)
 }

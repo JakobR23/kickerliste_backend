@@ -64,6 +64,7 @@ func main() {
 			// Authenticated + password changed + admin only.
 			admin := normal.Group("", adminMiddleware)
 			userRepo.RegisterAdminHandlers(admin, userService)
+			fixtureRepo.RegisterAdminHandlers(admin, fixtureService)
 			adjustmentRepo.RegisterHandlers(admin, adjustmentService)
 		},
 	)
