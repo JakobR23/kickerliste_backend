@@ -2,18 +2,11 @@ package user
 
 import (
 	"context"
-	"errors"
 
 	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/hash"
-
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 )
-
-// ErrUsernameTaken is returned when a CREATE violates the unique constraint on username.
-var ErrUsernameTaken = errors.New("username already taken")
 
 type Repository struct {
 	db *database.DB
@@ -111,9 +104,6 @@ func (r *Repository) Create(ctx context.Context, username, password string, forc
 		`INSERT INTO "user" (username, password, hashsalt, force_password_change) VALUES ($1, $2, $3, $4) RETURNING id`,
 		username, hashed, salt, forcePasswordChange).Scan(&id)
 	if err != nil {
-		if isUniqueViolation(err) {
-			return entity.User{}, ErrUsernameTaken
-		}
 		return entity.User{}, err
 	}
 
@@ -152,8 +142,3 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 	return err
 }
 
-// isUniqueViolation reports whether err is a PostgreSQL unique-constraint violation.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
-}

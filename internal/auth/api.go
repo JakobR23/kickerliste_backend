@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"bierliste_backend/internal/user"
+	"bierliste_backend/internal/httputil"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,11 +58,7 @@ func (r resource) register(c *gin.Context) {
 
 	token, err := r.service.Register(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, user.ErrUsernameTaken) {
-			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		httputil.HandleError(c, err)
 		return
 	}
 

@@ -1,7 +1,6 @@
 package user
 
 import (
-	"errors"
 	"net/http"
 
 	"bierliste_backend/internal/httputil"
@@ -67,10 +66,6 @@ func (r resource) create(c *gin.Context) {
 	}
 	u, err := r.service.Create(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, ErrUsernameTaken) {
-			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
-			return
-		}
 		httputil.HandleError(c, err)
 		return
 	}
