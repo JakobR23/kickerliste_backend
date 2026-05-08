@@ -790,9 +790,14 @@ components:
           $ref: "#/components/schemas/Role"
           readOnly: true
         totalScore:
-          type: integer
+          type: number
+          format: double
           readOnly: true
-          description: Derived from the user_total_score view; not stored on the row
+          description: |
+            Derived from the user_total_score view; not stored on the row.
+            Fixture values are split equally among team members, so a player
+            on a 2-member team accrues ±value/2 per fixture. May be fractional
+            when an odd value is split across a 2-player team.
       required: [id, username, role, totalScore]
 
     Team:
