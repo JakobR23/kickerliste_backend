@@ -27,12 +27,11 @@ SELECT
     u.username,
     u.role,
     COALESCE(SUM(
+        -- draws are excluded by the JOIN (f.result <> 'draw'), so ELSE is always a loss
         CASE
-            WHEN f.team_1_id = t.id AND f.result = 'team_1' THEN  f.value
-            WHEN f.team_2_id = t.id AND f.result = 'team_2' THEN  f.value
-            WHEN f.team_1_id = t.id AND f.result = 'team_2' THEN -f.value
-            WHEN f.team_2_id = t.id AND f.result = 'team_1' THEN -f.value
-            ELSE 0
+            WHEN (f.team_1_id = t.id AND f.result = 'team_1') 
+            OR (f.team_2_id = t.id AND f.result = 'team_2') THEN f.value
+            ELSE -f.value
         END
     ), 0)
     + COALESCE((
