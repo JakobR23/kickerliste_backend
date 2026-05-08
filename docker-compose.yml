@@ -20,10 +20,13 @@ services:
     build: .
     ports:
       - "${PORT:-8080}:8080"
+    env_file:
+      # All variables are injected from this file into the container environment.
+      # env/.env is gitignored — copy env/.env.example and fill in real values.
+      - ./env/.env
     environment:
-      # All other variables come from env/.env via LoadConfig().
-      # DB_HOST is overridden here so the backend resolves to the postgres
-      # service on the Docker network instead of localhost.
+      # DB_HOST overrides the value in env/.env so the backend resolves to the
+      # postgres service on the Docker network instead of localhost.
       DB_HOST: postgres
     depends_on:
       postgres:
