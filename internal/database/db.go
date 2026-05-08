@@ -195,10 +195,11 @@ func repairMigrations() error {
 	drops := []string{
 		// Tables — drop in child-first order so FK constraints are never an obstacle,
 		// though CASCADE would handle that anyway.
-		`DROP TABLE IF EXISTS fixture     CASCADE`,
-		`DROP TABLE IF EXISTS team_member CASCADE`,
-		`DROP TABLE IF EXISTS team        CASCADE`,
-		`DROP TABLE IF EXISTS "user"      CASCADE`,
+		`DROP TABLE IF EXISTS score_adjustment CASCADE`,
+		`DROP TABLE IF EXISTS fixture          CASCADE`,
+		`DROP TABLE IF EXISTS team_member      CASCADE`,
+		`DROP TABLE IF EXISTS team             CASCADE`,
+		`DROP TABLE IF EXISTS "user"           CASCADE`,
 		// Enum types — must come after tables that reference them.
 		`DROP TYPE IF EXISTS fixture_status CASCADE`,
 		`DROP TYPE IF EXISTS match_result   CASCADE`,
