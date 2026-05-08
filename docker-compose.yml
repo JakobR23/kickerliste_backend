@@ -30,9 +30,15 @@ services:
       # env/.env is used for local "go run" development only.
       - ./.env
     environment:
-      # DB_HOST overrides the value in .env so the backend resolves to the
-      # postgres service on the Docker network instead of localhost.
+      # DB_HOST is always "postgres" inside the container. extra_hosts below
+      # ensures the name resolves whether or not the postgres profile is active.
       DB_HOST: postgres
+    extra_hosts:
+      # Maps "postgres" to the host machine when the postgres profile is not
+      # active (i.e. postgres is running directly on the host). When the
+      # postgres profile is active, Docker's service DNS takes precedence and
+      # this entry is ignored.
+      - "postgres:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

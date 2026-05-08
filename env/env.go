@@ -66,7 +66,6 @@ func LoadConfig() {
 	file, err := os.OpenFile("./env/.env", os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Println("env/.env not found — relying on environment variables")
 			return
 		}
 		log.Fatalf("unable to read env/.env: %v", err)
