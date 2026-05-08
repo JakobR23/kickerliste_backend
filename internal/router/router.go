@@ -9,11 +9,13 @@ import (
 type RegisterFunc func(rg *gin.RouterGroup)
 
 // New builds and returns the application router.
+// All routes are mounted under /api/v1.
 // Pass one RegisterFunc per domain to mount its routes.
 func New(registrars ...RegisterFunc) *gin.Engine {
 	r := gin.Default()
+	v1 := r.Group("/api/v1")
 	for _, register := range registrars {
-		register(&r.RouterGroup)
+		register(v1)
 	}
 	return r
 }
