@@ -7,7 +7,7 @@ services:
     profiles: ["postgres"]
     image: postgres:18
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-bierliste}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in env/.env or the shell environment}
       PGDATA: /var/lib/postgresql/18/docker
     volumes:
       - postgres_data:/var/lib/postgresql
