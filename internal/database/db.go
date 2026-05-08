@@ -56,9 +56,23 @@ func InitializeConnection() *pgx.Conn {
 }
 
 // RunMigrations applies all pending up-migrations embedded in migrationsFS.
-// If the database is left in a dirty or otherwise corrupt state from a previous
-// failed run, it repairs automatically by executing the down migrations directly
-// via raw SQL and retrying.
+//
+// Recovery strategy when a migration is found dirty (previously started but
+// not completed):
+//
+//  1. Non-destructive retry (all environments): reset schema_migrations to the
+//     last clean version via direct SQL and re-run Up(). If the failed migration
+//     ran inside a PostgreSQL transaction the schema is unchanged, so this simply
+//     re-applies the failed migration without touching any existing data.
+//
+//  2. Full schema repair (development only, APP_ENV=development): if the
+//     non-destructive retry fails — meaning schema objects from the partial run
+//     are still present — drop every application table and type with CASCADE and
+//     re-run all migrations from scratch. This is destructive and must never run
+//     against a database with data worth keeping.
+//
+//  In production a dirty migration that cannot be non-destructively recovered
+//  causes an immediate fatal, forcing a human operator to resolve it manually.
 func RunMigrations(migrationsFS fs.FS) {
 	dbURL := fmt.Sprintf("pgx5://%s:%s@%s:%s/%s",
 		env.DatabaseUser.GetValue(),
@@ -82,26 +96,77 @@ func RunMigrations(migrationsFS fs.FS) {
 	m := newMigrate()
 	defer m.Close()
 
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	if err := m.Up(); err == nil || errors.Is(err, migrate.ErrNoChange) {
+		return
+	} else {
 		var dirtyErr migrate.ErrDirty
-		if errors.As(err, &dirtyErr) {
-			log.Printf("dirty migration at version %d — repairing", dirtyErr.Version)
-		} else {
-			log.Printf("migration error (%v) — attempting repair", err)
+		if !errors.As(err, &dirtyErr) {
+			log.Fatalf("migration failed: %v", err)
 		}
 
-		if err := repairMigrations(); err != nil {
-			log.Fatalf("migration repair failed: %v", err)
+		// Stage 1 — non-destructive: reset schema_migrations to the previous clean
+		// version and retry. Works when the failed migration was transactional and
+		// the schema is still intact.
+		log.Printf("dirty migration at version %d — attempting non-destructive recovery", dirtyErr.Version)
+		if err := resetToPreviousVersion(dirtyErr.Version); err != nil {
+			log.Fatalf("migration: could not reset dirty state: %v", err)
 		}
 
-		// Fresh instance so the internal source/DB state is clean.
 		m2 := newMigrate()
 		defer m2.Close()
 
-		if err := m2.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-			log.Fatalf("migration failed after repair: %v", err)
+		if err := m2.Up(); err == nil || errors.Is(err, migrate.ErrNoChange) {
+			return
+		} else {
+			// Stage 2 — destructive: the migration left partial schema objects
+			// behind (non-transactional failure). Only permitted in development.
+			if !env.IsDevelopment() {
+				log.Fatalf(
+					"migration failed after non-destructive recovery and full schema "+
+						"repair is disabled outside of development (APP_ENV=%q). "+
+						"Resolve manually by inspecting schema_migrations and the schema: %v",
+					env.AppEnv.GetValue(), err)
+			}
+
+			log.Printf("non-destructive recovery failed (%v) — falling back to full schema repair (development only)", err)
+			if err := repairMigrations(); err != nil {
+				log.Fatalf("migration repair failed: %v", err)
+			}
+
+			m3 := newMigrate()
+			defer m3.Close()
+
+			if err := m3.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+				log.Fatalf("migration failed after full repair: %v", err)
+			}
 		}
 	}
+}
+
+// resetToPreviousVersion sets schema_migrations to (dirtyVersion-1, dirty=false)
+// using direct SQL. This bypasses golang-migrate's Force() API, which has an
+// internal uint conversion that maps -1 to 0 and causes subsequent Up() calls
+// to fail. When dirtyVersion is 1 the row is simply deleted, leaving the table
+// empty (no migrations applied).
+func resetToPreviousVersion(dirtyVersion int) error {
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr())
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	if _, err := conn.Exec(ctx, `DELETE FROM schema_migrations`); err != nil {
+		return fmt.Errorf("clear schema_migrations: %w", err)
+	}
+	if dirtyVersion > 1 {
+		if _, err := conn.Exec(ctx,
+			`INSERT INTO schema_migrations (version, dirty) VALUES ($1, false)`,
+			dirtyVersion-1); err != nil {
+			return fmt.Errorf("restore previous version: %w", err)
+		}
+	}
+	return nil
 }
 
 // repairMigrations brings the database back to a clean baseline so that

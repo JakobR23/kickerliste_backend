@@ -23,7 +23,15 @@ const (
 	Port             EnvKey = "PORT"
 	HashsaltLength   EnvKey = "HASHSALT_LENGTH"
 	JWTSecret        EnvKey = "JWT_SECRET"
+	AppEnv           EnvKey = "APP_ENV"
 )
+
+// IsDevelopment reports whether the application is running in development mode
+// (APP_ENV=development). Destructive operations such as automatic schema repair
+// are only permitted when this returns true.
+func IsDevelopment() bool {
+	return AppEnv.GetValue() == "development"
+}
 
 func LoadConfig() {
 	file, err := os.OpenFile("./env/.env", os.O_RDONLY, os.ModePerm)
