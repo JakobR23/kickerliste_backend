@@ -37,6 +37,7 @@ func main() {
 	jwtSecret := env.JWTSecret.GetValue()
 	authMiddleware := auth.Middleware(jwtSecret)
 	adminMiddleware := auth.AdminMiddleware()
+	passwordChangedMiddleware := auth.PasswordChangedMiddleware()
 
 	authService := auth.NewService(users, jwtSecret)
 	userService := userRepo.NewService(users)
@@ -45,14 +46,24 @@ func main() {
 	adjustmentService := adjustmentRepo.NewService(adjustments)
 
 	r := router.New(
-		func(rg *gin.RouterGroup) { auth.RegisterHandlers(rg, authService) },
 		func(rg *gin.RouterGroup) {
-			protected := rg.Group("", authMiddleware)
-			userRepo.RegisterHandlers(protected, userService)
-			teamRepo.RegisterHandlers(protected, teamService)
-			fixtureRepo.RegisterHandlers(protected, fixtureService)
+			// Public: login and self-registration.
+			auth.RegisterPublicHandlers(rg, authService)
 
-			admin := protected.Group("", adminMiddleware)
+			// Authenticated: change-password is intentionally NOT behind
+			// passwordChangedMiddleware so users can always reach it.
+			protected := rg.Group("", authMiddleware)
+			auth.RegisterProtectedHandlers(protected, authService)
+
+			// Authenticated + password already changed (normal usage).
+			normal := protected.Group("", passwordChangedMiddleware)
+			userRepo.RegisterHandlers(normal, userService)
+			teamRepo.RegisterHandlers(normal, teamService)
+			fixtureRepo.RegisterHandlers(normal, fixtureService)
+
+			// Authenticated + password changed + admin only.
+			admin := normal.Group("", adminMiddleware)
+			userRepo.RegisterAdminHandlers(admin, userService)
 			adjustmentRepo.RegisterHandlers(admin, adjustmentService)
 		},
 	)

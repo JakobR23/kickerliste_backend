@@ -44,7 +44,8 @@ func (s *service) GetById(ctx context.Context, id int) (entity.User, error) {
 }
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (entity.User, error) {
-	return s.repo.Create(ctx, req.Username, req.Password)
+	// Admin-created accounts require a password change on first login.
+	return s.repo.Create(ctx, req.Username, req.Password, true)
 }
 
 func (s *service) Update(ctx context.Context, id int, req UpdateRequest) (entity.User, error) {
