@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"sort"
-	"strings"
 
 	"bierliste_backend/env"
 
@@ -92,7 +90,7 @@ func RunMigrations(migrationsFS fs.FS) {
 			log.Printf("migration error (%v) — attempting repair", err)
 		}
 
-		if err := repairMigrations(migrationsFS); err != nil {
+		if err := repairMigrations(); err != nil {
 			log.Fatalf("migration repair failed: %v", err)
 		}
 
@@ -106,11 +104,21 @@ func RunMigrations(migrationsFS fs.FS) {
 	}
 }
 
-// repairMigrations brings the database back to a clean baseline by running every
-// down migration (highest version first) via raw SQL, then clearing schema_migrations.
-// All down statements use IF EXISTS so the function is safe to call regardless of
-// how much of the schema was actually applied.
-func repairMigrations(migrationsFS fs.FS) error {
+// repairMigrations brings the database back to a clean baseline so that
+// RunMigrations can re-apply every up-migration from scratch.
+//
+// Rather than running down-migration SQL files (which carry state assumptions
+// about which earlier migrations have fully applied), we drop every known
+// application-level object directly with DROP … IF EXISTS … CASCADE.
+// CASCADE lets PostgreSQL resolve the dependency order automatically — views,
+// foreign keys, and other dependents are removed without needing to be listed
+// explicitly — and IF EXISTS makes each statement safe to run regardless of
+// how much of the schema was actually applied before the failure.
+//
+// NOTE: this list must be updated whenever a migration adds a new top-level
+// table or enum type.  Views and indexes do not need to be listed because they
+// are dropped automatically via CASCADE when their parent table is dropped.
+func repairMigrations() error {
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, connStr())
@@ -119,33 +127,28 @@ func repairMigrations(migrationsFS fs.FS) error {
 	}
 	defer conn.Close(ctx)
 
-	entries, err := fs.ReadDir(migrationsFS, ".")
-	if err != nil {
-		return fmt.Errorf("repair: list migrations: %w", err)
+	drops := []string{
+		// Tables — drop in child-first order so FK constraints are never an obstacle,
+		// though CASCADE would handle that anyway.
+		`DROP TABLE IF EXISTS fixture     CASCADE`,
+		`DROP TABLE IF EXISTS team_member CASCADE`,
+		`DROP TABLE IF EXISTS team        CASCADE`,
+		`DROP TABLE IF EXISTS "user"      CASCADE`,
+		// Enum types — must come after tables that reference them.
+		`DROP TYPE IF EXISTS fixture_status CASCADE`,
+		`DROP TYPE IF EXISTS match_result   CASCADE`,
+		`DROP TYPE IF EXISTS user_role      CASCADE`,
 	}
 
-	// Collect down-migration filenames and sort highest-version first.
-	var downFiles []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".down.sql") {
-			downFiles = append(downFiles, e.Name())
-		}
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(downFiles)))
-
-	for _, name := range downFiles {
-		sql, err := fs.ReadFile(migrationsFS, name)
-		if err != nil {
-			return fmt.Errorf("repair: read %s: %w", name, err)
-		}
-		if _, err := conn.Exec(ctx, string(sql)); err != nil {
-			// Objects may not exist if the migration never completed — log and continue.
-			log.Printf("repair: %s: %v", name, err)
+	for _, stmt := range drops {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
+			// Shouldn't happen with IF EXISTS, but log rather than abort.
+			log.Printf("repair: warning: %v", err)
 		}
 	}
 
-	// Reset migration tracking. The table itself may not exist on a very first run,
-	// so ignore errors here.
+	// Reset migration tracking so Up() starts from a clean slate.
+	// Ignore errors — the table may not exist on the very first run.
 	if _, err := conn.Exec(ctx, `DELETE FROM schema_migrations`); err != nil {
 		log.Printf("repair: clear schema_migrations: %v", err)
 	}
