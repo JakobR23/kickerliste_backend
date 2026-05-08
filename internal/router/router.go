@@ -18,6 +18,13 @@ type RegisterFunc func(rg *gin.RouterGroup)
 // Pass one RegisterFunc per domain to mount its routes.
 func New(registrars ...RegisterFunc) *gin.Engine {
 	r := gin.Default()
+
+	// Trust no proxies — use the direct connection's remote address as the
+	// client IP. If a reverse proxy (nginx, Traefik, etc.) is added in front
+	// of this service, set this to the proxy's IP or CIDR range instead so
+	// that X-Forwarded-For headers are read correctly.
+	r.SetTrustedProxies(nil) //nolint:errcheck
+
 	v1 := r.Group("/api/v1")
 
 	r.Use(cors.New(cors.Config{
