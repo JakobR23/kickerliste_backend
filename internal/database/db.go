@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
+	"os"
 
 	"bierliste_backend/env"
 
@@ -50,7 +51,8 @@ func connStr() string {
 func InitializeConnection() *pgx.Conn {
 	conn, err := pgx.Connect(context.Background(), connStr())
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		slog.Error("unable to connect to database", "error", err)
+		os.Exit(1)
 	}
 	return conn
 }
@@ -84,11 +86,13 @@ func RunMigrations(migrationsFS fs.FS) {
 	newMigrate := func() *migrate.Migrate {
 		d, err := iofs.New(migrationsFS, ".")
 		if err != nil {
-			log.Fatalf("migration source error: %v", err)
+			slog.Error("migration source error", "error", err)
+			os.Exit(1)
 		}
 		m, err := migrate.NewWithSourceInstance("iofs", d, dbURL)
 		if err != nil {
-			log.Fatalf("migration init error: %v", err)
+			slog.Error("migration init error", "error", err)
+			os.Exit(1)
 		}
 		return m
 	}
@@ -101,15 +105,17 @@ func RunMigrations(migrationsFS fs.FS) {
 	} else {
 		var dirtyErr migrate.ErrDirty
 		if !errors.As(err, &dirtyErr) {
-			log.Fatalf("migration failed: %v", err)
+			slog.Error("migration failed", "error", err)
+			os.Exit(1)
 		}
 
 		// Stage 1 — non-destructive: reset schema_migrations to the previous clean
 		// version and retry. Works when the failed migration was transactional and
 		// the schema is still intact.
-		log.Printf("dirty migration at version %d — attempting non-destructive recovery", dirtyErr.Version)
+		slog.Warn("dirty migration detected — attempting non-destructive recovery", "version", dirtyErr.Version)
 		if err := resetToPreviousVersion(dirtyErr.Version); err != nil {
-			log.Fatalf("migration: could not reset dirty state: %v", err)
+			slog.Error("migration: could not reset dirty state", "error", err)
+			os.Exit(1)
 		}
 
 		m2 := newMigrate()
@@ -121,23 +127,26 @@ func RunMigrations(migrationsFS fs.FS) {
 			// Stage 2 — destructive: the migration left partial schema objects
 			// behind (non-transactional failure). Only permitted in development.
 			if !env.IsDevelopment() {
-				log.Fatalf(
-					"migration failed after non-destructive recovery and full schema "+
-						"repair is disabled outside of development (APP_ENV=%q). "+
-						"Resolve manually by inspecting schema_migrations and the schema: %v",
-					env.AppEnv.GetValue(), err)
+				slog.Error(
+					"migration failed after non-destructive recovery; full schema repair is disabled outside development — resolve manually",
+					"app_env", env.AppEnv.GetValue(),
+					"error", err,
+				)
+				os.Exit(1)
 			}
 
-			log.Printf("non-destructive recovery failed (%v) — falling back to full schema repair (development only)", err)
+			slog.Warn("non-destructive recovery failed — falling back to full schema repair (development only)", "error", err)
 			if err := repairMigrations(); err != nil {
-				log.Fatalf("migration repair failed: %v", err)
+				slog.Error("migration repair failed", "error", err)
+				os.Exit(1)
 			}
 
 			m3 := newMigrate()
 			defer m3.Close()
 
 			if err := m3.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-				log.Fatalf("migration failed after full repair: %v", err)
+				slog.Error("migration failed after full repair", "error", err)
+				os.Exit(1)
 			}
 		}
 	}
@@ -209,14 +218,14 @@ func repairMigrations() error {
 	for _, stmt := range drops {
 		if _, err := conn.Exec(ctx, stmt); err != nil {
 			// Shouldn't happen with IF EXISTS, but log rather than abort.
-			log.Printf("repair: warning: %v", err)
+			slog.Warn("repair: drop statement warning", "error", err)
 		}
 	}
 
 	// Reset migration tracking so Up() starts from a clean slate.
 	// Ignore errors — the table may not exist on the very first run.
 	if _, err := conn.Exec(ctx, `DELETE FROM schema_migrations`); err != nil {
-		log.Printf("repair: clear schema_migrations: %v", err)
+		slog.Warn("repair: could not clear schema_migrations", "error", err)
 	}
 
 	return nil
