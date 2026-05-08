@@ -3,3 +3,4 @@ tmp
 *.air.*
 sql
 .claude
+instructions
