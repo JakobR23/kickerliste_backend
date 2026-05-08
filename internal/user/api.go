@@ -12,16 +12,25 @@ type resource struct {
 	service Service
 }
 
-// RegisterHandlers mounts the user routes onto the given router group.
+// RegisterHandlers mounts the user routes that require authentication but are
+// available to all roles.
 func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	r := resource{service}
 
 	users := rg.Group("/users")
 	users.GET("", r.list)
-	users.POST("", r.create)
 	users.GET("/:id", r.get)
 	users.PUT("/:id", r.update)
 	users.DELETE("/:id", r.delete)
+}
+
+// RegisterAdminHandlers mounts the user routes that are restricted to admins.
+// rg must already have AdminMiddleware applied.
+func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
+	r := resource{service}
+
+	users := rg.Group("/users")
+	users.POST("", r.create)
 }
 
 // list handles GET /users
@@ -48,7 +57,7 @@ func (r resource) get(c *gin.Context) {
 	c.JSON(http.StatusOK, u)
 }
 
-// create handles POST /users
+// create handles POST /users (admin only)
 func (r resource) create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

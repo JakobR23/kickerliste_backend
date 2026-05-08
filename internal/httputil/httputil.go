@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -23,10 +24,10 @@ func ParseID(c *gin.Context) (int, bool) {
 
 // HandleError maps common database errors to appropriate HTTP responses.
 //
-//   - pgx.ErrNoRows          → 404 Not Found
-//   - PgError 23505 (unique) → 409 Conflict
-//   - PgError 23503 (fk)     → 422 Unprocessable Entity
-//   - everything else        → 500 Internal Server Error
+//   - pgx.ErrNoRows                       → 404 Not Found
+//   - PgError unique_violation (23505)    → 409 Conflict
+//   - PgError foreign_key_violation (23503) → 422 Unprocessable Entity
+//   - everything else                     → 500 Internal Server Error
 func HandleError(c *gin.Context, err error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "resource not found"})
@@ -35,10 +36,10 @@ func HandleError(c *gin.Context, err error) {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case "23505": // unique_violation
+		case pgerrcode.UniqueViolation:
 			c.JSON(http.StatusConflict, gin.H{"message": pgErr.Detail})
 			return
-		case "23503": // foreign_key_violation
+		case pgerrcode.ForeignKeyViolation:
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": pgErr.Detail})
 			return
 		}

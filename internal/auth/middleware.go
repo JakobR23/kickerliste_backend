@@ -15,9 +15,13 @@ const UserIDKey = "userId"
 // UserRoleKey is the gin.Context key under which the authenticated user's role is stored.
 const UserRoleKey = "userRole"
 
+// ForcePasswordChangeKey is the gin.Context key indicating whether the
+// authenticated user must change their password before doing anything else.
+const ForcePasswordChangeKey = "forcePasswordChange"
+
 // Middleware returns a Gin handler that validates the Bearer JWT on every request.
-// On success it stores the user ID in the context under UserIDKey and calls Next.
-// On failure it aborts with 401.
+// On success it stores the user ID, role, and force-password-change flag in the
+// context and calls Next. On failure it aborts with 401.
 func Middleware(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -40,6 +44,7 @@ func Middleware(secret string) gin.HandlerFunc {
 
 		c.Set(UserIDKey, claims.UserId)
 		c.Set(UserRoleKey, claims.Role)
+		c.Set(ForcePasswordChangeKey, claims.ForcePasswordChange)
 		c.Next()
 	}
 }
@@ -51,6 +56,23 @@ func AdminMiddleware() gin.HandlerFunc {
 		role, _ := c.Get(UserRoleKey)
 		if role != entity.RoleAdmin {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "admin access required"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// PasswordChangedMiddleware aborts with 403 when the authenticated user's token
+// carries forcePasswordChange = true. Place this after Middleware in the chain
+// for any route that should be unavailable until the user sets a new password.
+// The change-password endpoint itself must NOT be behind this middleware.
+func PasswordChangedMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		force, _ := c.Get(ForcePasswordChangeKey)
+		if force == true {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "you must change your password before continuing",
+			})
 			return
 		}
 		c.Next()
