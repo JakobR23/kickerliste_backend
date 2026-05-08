@@ -1,17 +1,134 @@
 openapi: 3.0.3
 info:
   title: Bierliste Backend API
-  version: 0.1.0
+  version: 0.2.0
+  description: |
+    REST API for the Kickerliste office foosball score tracker.
+
+    ## Authentication
+    Most endpoints require a JWT passed as `Authorization: Bearer <token>`.
+    Tokens are obtained from `POST /auth/login` or `POST /auth/register`.
+
+    Tokens issued for admin-created accounts carry `forcePasswordChange: true`.
+    Those accounts may only call `POST /auth/change-password` until a new
+    password is set; all other protected endpoints return `403` until then.
+
+    ## Roles
+    Endpoints marked **admin only** require the `role: "admin"` claim in the
+    JWT. A valid token with `role: "user"` returns `403`.
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8080/api/v1
 
 tags:
+  - name: auth
+    description: Authentication and credential management
   - name: users
+    description: User accounts (admin-managed)
   - name: teams
+    description: Teams and team membership
   - name: fixtures
+    description: Match fixtures (submit, review, approve/reject)
+  - name: score-adjustments
+    description: Manual score adjustments applied by admins
+
+security: []   # default — individual operations opt in via security field
 
 paths:
+
+  # ------------------------------------------------------------------ auth
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in and obtain a JWT
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK — returns a signed JWT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Self-register a new account
+      description: |
+        Creates a user account with `role: "user"` and `forcePasswordChange: false`.
+        Returns a JWT that can be used immediately.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created — returns a signed JWT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: Change the authenticated user's password
+      description: |
+        Available to any authenticated user, including those with
+        `forcePasswordChange: true`. On success returns a fresh JWT with
+        `forcePasswordChange: false`.
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: OK — returns a fresh JWT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ------------------------------------------------------------------ users
 
@@ -20,6 +137,8 @@ paths:
       tags: [users]
       summary: List all users with their total scores
       operationId: listUsers
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -29,11 +148,19 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
     post:
       tags: [users]
-      summary: Register a new user
+      summary: Create a user account (admin only)
+      description: |
+        Admin-created accounts are assigned `role: "user"` and have
+        `forcePasswordChange: true` set in their JWT. The user must call
+        `POST /auth/change-password` before accessing any other endpoint.
       operationId: createUser
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -47,6 +174,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           description: Username already taken
           content:
@@ -62,6 +195,8 @@ paths:
       tags: [users]
       summary: Get a user by ID
       operationId: getUser
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -69,6 +204,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -76,6 +213,8 @@ paths:
       tags: [users]
       summary: Update a user's username
       operationId: updateUser
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -89,6 +228,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -102,11 +245,77 @@ paths:
       tags: [users]
       summary: Delete a user
       operationId: deleteUser
+      security:
+        - BearerAuth: []
       responses:
         "204":
           description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /users/{id}/adjustments:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [score-adjustments]
+      summary: List manual score adjustments for a user (admin only)
+      operationId: listAdjustments
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreAdjustment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [score-adjustments]
+      summary: Apply a manual score adjustment to a user (admin only)
+      description: |
+        `amount` may be negative (penalty) or positive (bonus) but must not be zero.
+      operationId: createAdjustment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAdjustmentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreAdjustment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Amount must not be zero
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ------------------------------------------------------------------ teams
 
@@ -115,6 +324,8 @@ paths:
       tags: [teams]
       summary: List all teams
       operationId: listTeams
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -124,11 +335,15 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
     post:
       tags: [teams]
       summary: Create a team
       operationId: createTeam
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -142,6 +357,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /teams/{id}:
     parameters:
@@ -151,6 +370,8 @@ paths:
       tags: [teams]
       summary: Get a team by ID
       operationId: getTeam
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -158,6 +379,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -165,6 +388,8 @@ paths:
       tags: [teams]
       summary: Update a team's name
       operationId: updateTeam
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -178,6 +403,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -185,9 +414,13 @@ paths:
       tags: [teams]
       summary: Delete a team (cascades to team_member rows)
       operationId: deleteTeam
+      security:
+        - BearerAuth: []
       responses:
         "204":
           description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -199,6 +432,8 @@ paths:
       tags: [teams]
       summary: List members of a team
       operationId: listTeamMembers
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -208,6 +443,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -215,6 +452,8 @@ paths:
       tags: [teams]
       summary: Add a user to a team (max 2 members enforced at application layer)
       operationId: addTeamMember
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -228,6 +467,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -250,9 +493,13 @@ paths:
       tags: [teams]
       summary: Remove a user from a team
       operationId: removeTeamMember
+      security:
+        - BearerAuth: []
       responses:
         "204":
           description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -261,8 +508,13 @@ paths:
   /fixtures:
     get:
       tags: [fixtures]
-      summary: List all fixtures
+      summary: List approved fixtures
+      description: |
+        Returns only fixtures with `status: "approved"`. Use `GET /fixtures/{id}`
+        to retrieve a fixture of any status.
       operationId: listFixtures
+      security:
+        - BearerAuth: []
       parameters:
         - name: teamId
           in: query
@@ -279,11 +531,22 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Fixture"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
     post:
       tags: [fixtures]
-      summary: Record a new fixture
+      summary: Submit a new fixture for admin approval
+      description: |
+        Creates a fixture with `status: "pending"`. The authenticated user is
+        recorded as `submittedBy`. An admin must approve it before it counts
+        toward scores.
+
+        `playedAt` defaults to the current server time when omitted.
+        `team1Score` and `team2Score` must either both be provided or both be omitted.
       operationId: createFixture
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -292,13 +555,17 @@ paths:
               $ref: "#/components/schemas/CreateFixtureRequest"
       responses:
         "201":
-          description: Created
+          description: Created — fixture is pending admin review
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Fixture"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "422":
-          description: Validation error (e.g. same team on both sides, negative value)
+          description: Validation error (same team on both sides, or only one score provided)
           content:
             application/json:
               schema:
@@ -310,8 +577,10 @@ paths:
 
     get:
       tags: [fixtures]
-      summary: Get a fixture by ID
+      summary: Get a fixture by ID (any status)
       operationId: getFixture
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK
@@ -319,13 +588,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Fixture"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
     put:
       tags: [fixtures]
       summary: Update a fixture (result, scores, value)
+      description: |
+        `team1Score` and `team2Score` must either both be provided or both be omitted.
       operationId: updateFixture
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -339,10 +614,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Fixture"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
-          description: Validation error
+          description: Validation error (only one score provided)
           content:
             application/json:
               schema:
@@ -352,15 +631,96 @@ paths:
       tags: [fixtures]
       summary: Delete a fixture
       operationId: deleteFixture
+      security:
+        - BearerAuth: []
       responses:
         "204":
           description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /fixtures/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    patch:
+      tags: [fixtures]
+      summary: Approve a pending fixture (admin only)
+      description: |
+        Transitions the fixture from `pending` to `approved`. The fixture will
+        now appear in `GET /fixtures` and contribute to player scores.
+        Returns `409` if the fixture is not currently `pending`.
+      operationId: approveFixture
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK — returns the updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fixture"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Fixture is not in pending state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /fixtures/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    patch:
+      tags: [fixtures]
+      summary: Reject a pending fixture (admin only)
+      description: |
+        Transitions the fixture from `pending` to `rejected`. The record is
+        preserved for audit purposes but does not count toward scores.
+        Returns `409` if the fixture is not currently `pending`.
+      operationId: rejectFixture
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK — returns the updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fixture"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Fixture is not in pending state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
 # ======================================================= components
 
 components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        HS256-signed JWT. Obtain a token from `POST /auth/login` or
+        `POST /auth/register`. Pass as `Authorization: Bearer <token>`.
 
   parameters:
     id:
@@ -371,6 +731,24 @@ components:
         type: integer
 
   responses:
+    BadRequest:
+      description: Bad request — malformed JSON or failed field validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated but not authorised (wrong role, or forcePasswordChange is true)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
       description: Resource not found
       content:
@@ -380,11 +758,23 @@ components:
 
   schemas:
 
-    # ---- domain types
+    # ---- domain enums
+
+    Role:
+      type: string
+      enum: [admin, user]
 
     MatchResult:
       type: string
       enum: [team_1, team_2, draw]
+
+    FixtureStatus:
+      type: string
+      enum: [pending, approved, rejected]
+      description: |
+        - `pending` — submitted, awaiting admin review
+        - `approved` — counted toward player scores
+        - `rejected` — reviewed but excluded from scores (record preserved for audit)
 
     # ---- entities (read models)
 
@@ -396,11 +786,14 @@ components:
           readOnly: true
         username:
           type: string
+        role:
+          $ref: "#/components/schemas/Role"
+          readOnly: true
         totalScore:
           type: integer
           readOnly: true
           description: Derived from the user_total_score view; not stored on the row
-      required: [id, username, totalScore]
+      required: [id, username, role, totalScore]
 
     Team:
       type: object
@@ -441,12 +834,94 @@ components:
         value:
           type: integer
           minimum: 0
-      required: [id, team1Id, team2Id, result, playedAt, value]
+        status:
+          $ref: "#/components/schemas/FixtureStatus"
+          readOnly: true
+        submittedBy:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: ID of the user who submitted this fixture
+      required: [id, team1Id, team2Id, result, playedAt, value, status]
+
+    ScoreAdjustment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        userId:
+          type: integer
+          readOnly: true
+          description: The user whose score is adjusted
+        amount:
+          type: integer
+          description: Positive for a bonus, negative for a penalty; never zero
+        reason:
+          type: string
+          description: Human-readable explanation recorded by the admin
+        createdBy:
+          type: integer
+          readOnly: true
+          description: ID of the admin who applied the adjustment
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required: [id, userId, amount, reason, createdBy, createdAt]
+
+    # ---- auth responses
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Signed JWT (HS256)
+      required: [token]
 
     # ---- request bodies
 
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+      required: [username, password]
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+      required: [username, password]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          writeOnly: true
+        newPassword:
+          type: string
+          minLength: 8
+          writeOnly: true
+      required: [currentPassword, newPassword]
+
     CreateUserRequest:
       type: object
+      description: |
+        Creates an account with `forcePasswordChange: true`. The user will be
+        required to call `POST /auth/change-password` on first login.
       properties:
         username:
           type: string
@@ -508,10 +983,12 @@ components:
         playedAt:
           type: string
           format: date-time
+          description: Defaults to the current server time when omitted
         value:
           type: integer
           minimum: 0
-      required: [team1Id, team2Id, result, value]
+          default: 0
+      required: [team1Id, team2Id, result]
 
     UpdateFixtureRequest:
       type: object
@@ -529,6 +1006,21 @@ components:
         value:
           type: integer
           minimum: 0
+      required: [result]
+
+    CreateAdjustmentRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          description: Points to add (positive) or deduct (negative); must not be zero
+          not:
+            enum: [0]
+        reason:
+          type: string
+          minLength: 1
+          description: Human-readable explanation for the adjustment
+      required: [amount, reason]
 
     # ---- error envelope
 
