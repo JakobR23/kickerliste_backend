@@ -7,7 +7,7 @@ services:
     profiles: ["postgres"]
     image: postgres:18
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in env/.env or the shell environment}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       PGDATA: /var/lib/postgresql/18/docker
     volumes:
       - postgres_data:/var/lib/postgresql
@@ -25,11 +25,12 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     env_file:
-      # All variables are injected from this file into the container environment.
-      # env/.env is gitignored — copy env/.env.example and fill in real values.
-      - ./env/.env
+      # All app variables are injected from the root .env into the container
+      # environment. Copy .env.example to .env and fill in real values.
+      # env/.env is used for local "go run" development only.
+      - ./.env
     environment:
-      # DB_HOST overrides the value in env/.env so the backend resolves to the
+      # DB_HOST overrides the value in .env so the backend resolves to the
       # postgres service on the Docker network instead of localhost.
       DB_HOST: postgres
     depends_on:
