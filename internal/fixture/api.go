@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"bierliste_backend/internal/auth"
+	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/httputil"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,8 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 	fixtures.PATCH("/:id/reject", r.reject)
 }
 
-// list handles GET /fixtures?teamId=<int>
+// list handles GET /fixtures?teamId=<int>&status=<pending|approved|rejected>
+// When status is omitted, fixtures of all statuses are returned.
 func (r resource) list(c *gin.Context) {
 	var teamId *int
 	if raw := c.Query("teamId"); raw != "" {
@@ -49,7 +51,17 @@ func (r resource) list(c *gin.Context) {
 		teamId = &id
 	}
 
-	fixtures, err := r.service.GetAll(c.Request.Context(), teamId)
+	var status *entity.FixtureStatus
+	if raw := c.Query("status"); raw != "" {
+		s := entity.FixtureStatus(raw)
+		if !s.IsValid() {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid status: must be pending, approved, or rejected"})
+			return
+		}
+		status = &s
+	}
+
+	fixtures, err := r.service.GetAll(c.Request.Context(), teamId, status)
 	if err != nil {
 		httputil.HandleError(c, err)
 		return

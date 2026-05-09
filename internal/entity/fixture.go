@@ -20,6 +20,20 @@ const (
 	StatusRejected FixtureStatus = "rejected"
 )
 
+// allFixtureStatuses is the single source of truth for valid FixtureStatus values.
+// Add new statuses here and IsValid() will pick them up automatically.
+var allFixtureStatuses = []FixtureStatus{StatusPending, StatusApproved, StatusRejected}
+
+// IsValid reports whether s is a known FixtureStatus value.
+func (s FixtureStatus) IsValid() bool {
+	for _, v := range allFixtureStatuses {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
 type Fixture struct {
 	Id          int           `json:"id"`
 	Team1Id     int           `json:"team1Id"`

@@ -18,14 +18,23 @@ func NewRepository(db *database.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// GetAll returns only approved fixtures, ordered newest first.
-func (r *Repository) GetAll(ctx context.Context) ([]entity.Fixture, error) {
+// GetAll returns fixtures ordered newest first.
+// teamId, when non-nil, restricts results to fixtures involving that team.
+// status, when non-nil, filters by that status; returns all statuses when nil.
+func (r *Repository) GetAll(ctx context.Context, teamId *int, status *entity.FixtureStatus) ([]entity.Fixture, error) {
+	var statusStr *string
+	if status != nil {
+		s := string(*status)
+		statusStr = &s
+	}
 	rows, err := r.db.With(ctx).Query(ctx, `
 		SELECT id, team_1_id, team_2_id, result::text, score_team_1, score_team_2,
 		       played_at, value, status::text, submitted_by
 		FROM fixture
-		WHERE status = 'approved'
-		ORDER BY played_at DESC`)
+		WHERE ($1::int IS NULL OR team_1_id = $1 OR team_2_id = $1)
+		  AND ($2::fixture_status IS NULL OR status = $2::fixture_status)
+		ORDER BY played_at DESC`,
+		teamId, statusStr)
 	if err != nil {
 		return nil, err
 	}
@@ -59,31 +68,6 @@ func (r *Repository) GetById(ctx context.Context, id int) (entity.Fixture, error
 		return entity.Fixture{}, pgx.ErrNoRows
 	}
 	return scanFixture(rows)
-}
-
-// GetByTeamId returns only approved fixtures for the given team.
-func (r *Repository) GetByTeamId(ctx context.Context, teamId int) ([]entity.Fixture, error) {
-	rows, err := r.db.With(ctx).Query(ctx, `
-		SELECT id, team_1_id, team_2_id, result::text, score_team_1, score_team_2,
-		       played_at, value, status::text, submitted_by
-		FROM fixture
-		WHERE (team_1_id = $1 OR team_2_id = $1)
-		  AND status = 'approved'
-		ORDER BY played_at DESC`, teamId)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var fixtures []entity.Fixture
-	for rows.Next() {
-		f, err := scanFixture(rows)
-		if err != nil {
-			return nil, err
-		}
-		fixtures = append(fixtures, f)
-	}
-	return fixtures, rows.Err()
 }
 
 // Create inserts a new fixture with status 'pending'.

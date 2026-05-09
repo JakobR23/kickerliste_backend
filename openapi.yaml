@@ -508,10 +508,11 @@ paths:
   /fixtures:
     get:
       tags: [fixtures]
-      summary: List approved fixtures
+      summary: List fixtures
       description: |
-        Returns only fixtures with `status: "approved"`. Use `GET /fixtures/{id}`
-        to retrieve a fixture of any status.
+        Returns fixtures ordered newest first. When `status` is omitted, fixtures
+        of all statuses are returned. Use `?status=approved` to restrict to
+        approved fixtures only (e.g. for a scoreboard view).
       operationId: listFixtures
       security:
         - BearerAuth: []
@@ -522,6 +523,13 @@ paths:
           description: Filter fixtures that involve this team (either side)
           schema:
             type: integer
+        - name: status
+          in: query
+          required: false
+          description: |
+            Filter by fixture status. Returns all statuses when omitted.
+          schema:
+            $ref: "#/components/schemas/FixtureStatus"
       responses:
         "200":
           description: OK
