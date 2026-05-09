@@ -39,7 +39,7 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 }
 
 // list handles GET /fixtures?teamId=<int>&status=<pending|approved|rejected>
-// When status is omitted, only approved fixtures are returned.
+// When status is omitted, fixtures of all statuses are returned.
 func (r resource) list(c *gin.Context) {
 	var teamId *int
 	if raw := c.Query("teamId"); raw != "" {

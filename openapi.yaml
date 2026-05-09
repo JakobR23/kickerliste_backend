@@ -510,9 +510,9 @@ paths:
       tags: [fixtures]
       summary: List fixtures
       description: |
-        Returns fixtures ordered newest first. Defaults to `status: "approved"`
-        when the `status` parameter is omitted, preserving scoreboard behaviour.
-        Any authenticated user may request any status value.
+        Returns fixtures ordered newest first. When `status` is omitted, fixtures
+        of all statuses are returned. Use `?status=approved` to restrict to
+        approved fixtures only (e.g. for a scoreboard view).
       operationId: listFixtures
       security:
         - BearerAuth: []
@@ -527,7 +527,7 @@ paths:
           in: query
           required: false
           description: |
-            Filter by fixture status. Defaults to `approved` when omitted.
+            Filter by fixture status. Returns all statuses when omitted.
           schema:
             $ref: "#/components/schemas/FixtureStatus"
       responses:

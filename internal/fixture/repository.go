@@ -20,21 +20,21 @@ func NewRepository(db *database.DB) *Repository {
 
 // GetAll returns fixtures ordered newest first.
 // teamId, when non-nil, restricts results to fixtures involving that team.
-// status, when non-nil, filters by that status; defaults to 'approved' when nil
-// so that the scoreboard endpoint is unchanged for callers that omit the filter.
+// status, when non-nil, filters by that status; returns all statuses when nil.
 func (r *Repository) GetAll(ctx context.Context, teamId *int, status *entity.FixtureStatus) ([]entity.Fixture, error) {
-	effectiveStatus := entity.StatusApproved
+	var statusStr *string
 	if status != nil {
-		effectiveStatus = *status
+		s := string(*status)
+		statusStr = &s
 	}
 	rows, err := r.db.With(ctx).Query(ctx, `
 		SELECT id, team_1_id, team_2_id, result::text, score_team_1, score_team_2,
 		       played_at, value, status::text, submitted_by
 		FROM fixture
 		WHERE ($1::int IS NULL OR team_1_id = $1 OR team_2_id = $1)
-		  AND status = $2::fixture_status
+		  AND ($2::fixture_status IS NULL OR status = $2::fixture_status)
 		ORDER BY played_at DESC`,
-		teamId, string(effectiveStatus))
+		teamId, statusStr)
 	if err != nil {
 		return nil, err
 	}

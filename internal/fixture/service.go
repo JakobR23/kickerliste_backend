@@ -57,8 +57,8 @@ func NewService(repo *Repository) Service {
 	return &service{repo: repo}
 }
 
-// GetAll returns fixtures optionally filtered by teamId and status.
-// When status is nil, only approved fixtures are returned (scoreboard default).
+// GetAll returns fixtures optionally filtered by teamId and/or status.
+// When status is nil, fixtures of all statuses are returned.
 func (s *service) GetAll(ctx context.Context, teamId *int, status *entity.FixtureStatus) ([]entity.Fixture, error) {
 	return s.repo.GetAll(ctx, teamId, status)
 }
