@@ -1,5 +1,7 @@
 # Secrets — never bake into the image; supply at runtime via environment
 env/.env
+.env
+*.log
 
 # Version control
 .git

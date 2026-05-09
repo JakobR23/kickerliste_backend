@@ -31,6 +31,9 @@ const (
 	// LogLevel sets the minimum log level (debug, info, warn, error).
 	// Defaults to "info" when not set.
 	LogLevel EnvKey = "LOG_LEVEL"
+	// ErrorLogFile is the path to the file where error-level log entries are
+	// persisted in JSON format. Defaults to "errors.log" when not set.
+	ErrorLogFile EnvKey = "ERROR_LOG_FILE"
 )
 
 // GetAllowedOrigins returns the list of permitted CORS origins.

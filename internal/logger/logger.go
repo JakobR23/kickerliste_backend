@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,17 +16,41 @@ import (
 // Setup initialises the global slog logger based on environment config.
 // Text format is used in development; JSON format everywhere else.
 // Log level is read from LOG_LEVEL (default: info).
+//
+// Error-level entries are always written to a JSON file in addition to stdout
+// so that 500s and panics are persisted across process restarts. The file path
+// is read from ERROR_LOG_FILE (default: errors.log).
 func Setup() {
 	opts := &slog.HandlerOptions{Level: parseLevel(env.LogLevel.GetValue())}
 
-	var handler slog.Handler
+	var primary slog.Handler
 	if env.IsDevelopment() {
-		handler = slog.NewTextHandler(os.Stdout, opts)
+		primary = slog.NewTextHandler(os.Stdout, opts)
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
+		primary = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	slog.SetDefault(slog.New(handler))
+	errorLogPath := env.ErrorLogFile.GetValue()
+	if errorLogPath == "" {
+		errorLogPath = "errors.log"
+	}
+
+	errorFile, err := os.OpenFile(errorLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		// Non-fatal: log to stdout only and continue.
+		slog.New(primary).Warn("could not open error log file — errors will only be written to stdout",
+			"path", errorLogPath,
+			"error", err,
+		)
+		slog.SetDefault(slog.New(primary))
+		return
+	}
+
+	// Error log always uses JSON regardless of environment so it is
+	// machine-readable and easy to grep or ship to a log aggregator.
+	errorFileHandler := slog.NewJSONHandler(errorFile, &slog.HandlerOptions{Level: slog.LevelError})
+
+	slog.SetDefault(slog.New(multiHandler{primary, errorFileHandler}))
 }
 
 // RequestLogger returns a Gin middleware that logs each HTTP request via slog.
@@ -74,6 +99,47 @@ func Recovery() gin.HandlerFunc {
 		)
 		c.AbortWithStatus(http.StatusInternalServerError)
 	})
+}
+
+// multiHandler fans slog records out to multiple handlers.
+// Each handler only receives records it is enabled for (e.g. the error file
+// handler silently ignores Info/Warn records).
+type multiHandler []slog.Handler
+
+func (m multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, h := range m {
+		if h.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m multiHandler) Handle(ctx context.Context, r slog.Record) error {
+	for _, h := range m {
+		if h.Enabled(ctx, r.Level) {
+			if err := h.Handle(ctx, r); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make(multiHandler, len(m))
+	for i, h := range m {
+		handlers[i] = h.WithAttrs(attrs)
+	}
+	return handlers
+}
+
+func (m multiHandler) WithGroup(name string) slog.Handler {
+	handlers := make(multiHandler, len(m))
+	for i, h := range m {
+		handlers[i] = h.WithGroup(name)
+	}
+	return handlers
 }
 
 func parseLevel(s string) slog.Level {

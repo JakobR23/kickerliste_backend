@@ -4,3 +4,4 @@ tmp
 sql
 .claude
 instructions
+*.log

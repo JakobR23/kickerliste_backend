@@ -44,5 +44,8 @@ func HandleError(c *gin.Context, err error) {
 			return
 		}
 	}
-	c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+	// Attach the full error to the Gin context so RequestLogger can persist it.
+	// The client receives a generic message — internal details are never exposed.
+	c.Error(err) //nolint:errcheck
+	c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 }
