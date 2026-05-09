@@ -54,13 +54,11 @@ func (r resource) list(c *gin.Context) {
 	var status *entity.FixtureStatus
 	if raw := c.Query("status"); raw != "" {
 		s := entity.FixtureStatus(raw)
-		switch s {
-		case entity.StatusPending, entity.StatusApproved, entity.StatusRejected:
-			status = &s
-		default:
+		if !s.IsValid() {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid status: must be pending, approved, or rejected"})
 			return
 		}
+		status = &s
 	}
 
 	fixtures, err := r.service.GetAll(c.Request.Context(), teamId, status)
