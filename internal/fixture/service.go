@@ -20,7 +20,7 @@ var ErrFixtureNotPending = errors.New("fixture is not pending")
 
 // Service encapsulates the business logic for fixture management.
 type Service interface {
-	GetAll(ctx context.Context, teamId *int) ([]entity.Fixture, error)
+	GetAll(ctx context.Context, teamId *int, status *entity.FixtureStatus) ([]entity.Fixture, error)
 	GetById(ctx context.Context, id int) (entity.Fixture, error)
 	Create(ctx context.Context, submittedBy int, req CreateRequest) (entity.Fixture, error)
 	Update(ctx context.Context, id int, req UpdateRequest) (entity.Fixture, error)
@@ -57,12 +57,10 @@ func NewService(repo *Repository) Service {
 	return &service{repo: repo}
 }
 
-// GetAll returns approved fixtures, optionally filtered to those involving teamId.
-func (s *service) GetAll(ctx context.Context, teamId *int) ([]entity.Fixture, error) {
-	if teamId != nil {
-		return s.repo.GetByTeamId(ctx, *teamId)
-	}
-	return s.repo.GetAll(ctx)
+// GetAll returns fixtures optionally filtered by teamId and status.
+// When status is nil, only approved fixtures are returned (scoreboard default).
+func (s *service) GetAll(ctx context.Context, teamId *int, status *entity.FixtureStatus) ([]entity.Fixture, error) {
+	return s.repo.GetAll(ctx, teamId, status)
 }
 
 func (s *service) GetById(ctx context.Context, id int) (entity.Fixture, error) {
