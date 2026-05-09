@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"bierliste_backend/env"
@@ -26,7 +25,7 @@ func main() {
 	database.RunMigrations(migrations.FS)
 
 	conn := database.InitializeConnection()
-	defer conn.Close(context.Background())
+	defer conn.Close()
 
 	db := database.New(conn)
 

@@ -15,10 +15,11 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Querier is satisfied by both *pgx.Conn and pgx.Tx, allowing repositories
-// to work transparently with either a plain connection or an active transaction.
+// Querier is satisfied by *pgxpool.Pool and pgx.Tx, allowing repositories
+// to work transparently with either the pool or an active transaction.
 type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -27,14 +28,14 @@ type Querier interface {
 
 type txKey struct{}
 
-// DB wraps a pgx connection and provides context-aware query access.
+// DB wraps a connection pool and provides context-aware query access.
 type DB struct {
-	conn *pgx.Conn
+	conn *pgxpool.Pool
 }
 
-// New wraps an open connection.
-func New(conn *pgx.Conn) *DB {
-	return &DB{conn: conn}
+// New wraps an open connection pool.
+func New(pool *pgxpool.Pool) *DB {
+	return &DB{conn: pool}
 }
 
 // connStr builds the base postgres:// connection string from environment variables.
@@ -47,14 +48,16 @@ func connStr() string {
 		env.DatabaseName.GetValue())
 }
 
-// InitializeConnection opens and returns a new database connection.
-func InitializeConnection() *pgx.Conn {
-	conn, err := pgx.Connect(context.Background(), connStr())
+// InitializeConnection creates and returns a connection pool.
+// The pool manages multiple connections so concurrent requests never
+// contend on a single pgx.Conn.
+func InitializeConnection() *pgxpool.Pool {
+	pool, err := pgxpool.New(context.Background(), connStr())
 	if err != nil {
-		slog.Error("unable to connect to database", "error", err)
+		slog.Error("unable to create database connection pool", "error", err)
 		os.Exit(1)
 	}
-	return conn
+	return pool
 }
 
 // RunMigrations applies all pending up-migrations embedded in migrationsFS.
