@@ -5,3 +5,4 @@ sql
 .claude
 instructions
 *.log
+docs/
