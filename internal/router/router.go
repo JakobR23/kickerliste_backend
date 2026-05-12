@@ -24,7 +24,11 @@ func New(registrars ...RegisterFunc) *gin.Engine {
 	// client IP. If a reverse proxy (nginx, Traefik, etc.) is added in front
 	// of this service, set this to the proxy's IP or CIDR range instead so
 	// that X-Forwarded-For headers are read correctly.
-	r.SetTrustedProxies(nil) //nolint:errcheck
+	if env.IsDevelopment() {
+		r.SetTrustedProxies(nil) //nolint:errcheck
+	} else {
+		r.SetTrustedProxies([]string{"172.16.0.0/12"})
+	}
 
 	r.Use(
 		cors.New(cors.Config{
