@@ -14,7 +14,8 @@ type resource struct {
 	service Service
 }
 
-// RegisterHandlers mounts the team and team-member routes onto the given router group.
+// RegisterHandlers mounts the team and team-member routes available to all
+// authenticated users onto the given router group.
 func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	r := resource{service}
 
@@ -23,9 +24,17 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	teams.POST("", r.create)
 	teams.GET("/:id", r.get)
 	teams.PUT("/:id", r.update)
-	teams.DELETE("/:id", r.delete)
 	teams.GET("/:id/members", r.listMembers)
 	teams.POST("/:id/members", r.addMember)
+}
+
+// RegisterAdminHandlers mounts the team and team-member routes that require
+// admin privileges onto the given router group.
+func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
+	r := resource{service}
+
+	teams := rg.Group("/teams")
+	teams.DELETE("/:id", r.delete)
 	teams.DELETE("/:id/members/:userId", r.removeMember)
 }
 
