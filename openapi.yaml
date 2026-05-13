@@ -1,17 +1,24 @@
 openapi: 3.0.3
 info:
   title: Bierliste Backend API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     REST API for the Kickerliste office foosball score tracker.
 
     ## Authentication
     Most endpoints require a JWT passed as `Authorization: Bearer <token>`.
-    Tokens are obtained from `POST /auth/login` or `POST /auth/register`.
+    Tokens are obtained from `POST /auth/login`.
 
     Tokens issued for admin-created accounts carry `forcePasswordChange: true`.
     Those accounts may only call `POST /auth/change-password` until a new
     password is set; all other protected endpoints return `403` until then.
+
+    ## Account activation
+    Self-registered accounts (`POST /auth/register`) start as **inactive** and
+    cannot log in until an admin activates them via `PATCH /users/:id/activate`.
+    Attempting to log in with an inactive account returns `403`.
+
+    Admin-created accounts (`POST /users`) are active immediately.
 
     ## Roles
     Endpoints marked **admin only** require the `role: "admin"` claim in the
@@ -64,14 +71,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: Account exists but has not been activated by an admin yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /auth/register:
     post:
       tags: [auth]
       summary: Self-register a new account
       description: |
-        Creates a user account with `role: "user"` and `forcePasswordChange: false`.
-        Returns a JWT that can be used immediately.
+        Creates an **inactive** user account with `role: "user"` and
+        `forcePasswordChange: false`. No JWT is issued — the account must be
+        activated by an admin via `PATCH /users/:id/activate` before the user
+        can log in.
       operationId: register
       requestBody:
         required: true
@@ -81,11 +96,11 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
         "201":
-          description: Created — returns a signed JWT
+          description: Created — account pending admin activation
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TokenResponse"
+                $ref: "#/components/schemas/MessageResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
@@ -135,10 +150,23 @@ paths:
   /users:
     get:
       tags: [users]
-      summary: List all users with their total scores
+      summary: List users with their total scores
+      description: |
+        Returns active users by default. Pass `?active=false` to list accounts
+        that are pending admin activation.
       operationId: listUsers
       security:
         - BearerAuth: []
+      parameters:
+        - name: active
+          in: query
+          required: false
+          description: |
+            Filter by activation status. Defaults to `true` (active users only).
+            Pass `false` to list accounts awaiting activation.
+          schema:
+            type: boolean
+            default: true
       responses:
         "200":
           description: OK
@@ -148,6 +176,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid value for `active` parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -252,6 +286,29 @@ paths:
           description: No Content
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    patch:
+      tags: [users]
+      summary: Activate a pending user account (admin only)
+      description: |
+        Sets `active = true` on the account, allowing the user to log in.
+        Typically called after reviewing a self-registered account.
+      operationId: activateUser
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: No Content — account is now active
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -412,7 +469,7 @@ paths:
 
     delete:
       tags: [teams]
-      summary: Delete a team (cascades to team_member rows)
+      summary: Delete a team (admin only — cascades to team_member rows)
       operationId: deleteTeam
       security:
         - BearerAuth: []
@@ -421,6 +478,8 @@ paths:
           description: No Content
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -491,7 +550,7 @@ paths:
 
     delete:
       tags: [teams]
-      summary: Remove a user from a team
+      summary: Remove a user from a team (admin only)
       operationId: removeTeamMember
       security:
         - BearerAuth: []
@@ -500,6 +559,8 @@ paths:
           description: No Content
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -727,8 +788,8 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        HS256-signed JWT. Obtain a token from `POST /auth/login` or
-        `POST /auth/register`. Pass as `Authorization: Bearer <token>`.
+        HS256-signed JWT. Obtain a token from `POST /auth/login`.
+        Pass as `Authorization: Bearer <token>`.
 
   parameters:
     id:
@@ -797,6 +858,14 @@ components:
         role:
           $ref: "#/components/schemas/Role"
           readOnly: true
+        active:
+          type: boolean
+          readOnly: true
+          description: |
+            `true` if the account has been activated and can log in.
+            Self-registered accounts start as `false` until an admin calls
+            `PATCH /users/:id/activate`. Admin-created accounts are `true`
+            immediately.
         totalScore:
           type: number
           format: double
@@ -806,7 +875,7 @@ components:
             Fixture values are split equally among team members, so a player
             on a 2-member team accrues ±value/2 per fixture. May be fractional
             when an odd value is split across a 2-player team.
-      required: [id, username, role, totalScore]
+      required: [id, username, role, active, totalScore]
 
     Team:
       type: object
@@ -892,6 +961,13 @@ components:
           type: string
           description: Signed JWT (HS256)
       required: [token]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
 
     # ---- request bodies
 

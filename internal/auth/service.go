@@ -16,10 +16,16 @@ var ErrInvalidCredentials = errors.New("invalid username or password")
 // match the one stored for the user during a change-password request.
 var ErrPasswordMismatch = errors.New("current password is incorrect")
 
+// ErrAccountNotActive is returned when a user attempts to log in but their
+// account has not yet been activated by an admin.
+var ErrAccountNotActive = errors.New("account pending activation")
+
 // Service handles login, registration, and credential management.
 type Service interface {
 	Login(ctx context.Context, req LoginRequest) (string, error)
-	Register(ctx context.Context, req RegisterRequest) (string, error)
+	// Register creates an inactive account pending admin activation. Returns
+	// no token — the user must be activated before they can log in.
+	Register(ctx context.Context, req RegisterRequest) error
 	ChangePassword(ctx context.Context, userId int, req ChangePasswordRequest) (string, error)
 }
 
@@ -52,6 +58,7 @@ func NewService(userRepo *user.Repository, secret string) Service {
 }
 
 // Login verifies the credentials and returns a signed JWT on success.
+// Returns ErrAccountNotActive if the account exists but has not been activated.
 func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 	u, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
@@ -63,18 +70,19 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
+	if !u.Active {
+		return "", ErrAccountNotActive
+	}
+
 	return generateToken(u, s.secret)
 }
 
-// Register creates a new user account and returns a signed JWT.
-// The account is created with force_password_change = false because the user
-// chose their own password during registration.
-func (s *service) Register(ctx context.Context, req RegisterRequest) (string, error) {
-	u, err := s.userRepo.Create(ctx, req.Username, req.Password, false)
-	if err != nil {
-		return "", err
-	}
-	return generateToken(u, s.secret)
+// Register creates an inactive account. No token is returned — the user must
+// wait for an admin to activate the account before they can log in.
+// force_password_change is false because the user chose their own password.
+func (s *service) Register(ctx context.Context, req RegisterRequest) error {
+	_, err := s.userRepo.Create(ctx, req.Username, req.Password, false, false)
+	return err
 }
 
 // ChangePassword verifies the current password, updates it to the new value,

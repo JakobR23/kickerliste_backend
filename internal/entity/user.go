@@ -16,6 +16,7 @@ type User struct {
 	Username   string  `json:"username"`
 	Role       Role    `json:"role"`
 	TotalScore float64 `json:"totalScore"`
+	Active     bool    `json:"active"`
 	password   string
 	hashsalt   string
 	// ForcePasswordChange signals that the user must change their password
@@ -31,7 +32,7 @@ func (u User) GetHashsalt() string { return u.hashsalt }
 // NewUser constructs a fully-populated User including the credential fields.
 // Intended for use by the repository layer when loading rows that include
 // password, hashsalt, and force_password_change (e.g. for authentication).
-func NewUser(id int, username string, role Role, password, hashsalt string, totalScore float64, forcePasswordChange bool) User {
+func NewUser(id int, username string, role Role, password, hashsalt string, totalScore float64, forcePasswordChange, active bool) User {
 	return User{
 		Id:                  id,
 		Username:            username,
@@ -40,5 +41,6 @@ func NewUser(id int, username string, role Role, password, hashsalt string, tota
 		hashsalt:            hashsalt,
 		TotalScore:          totalScore,
 		ForcePasswordChange: forcePasswordChange,
+		Active:              active,
 	}
 }

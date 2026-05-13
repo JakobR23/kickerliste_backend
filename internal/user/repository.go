@@ -16,9 +16,14 @@ func NewRepository(db *database.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
-	rows, err := r.db.With(ctx).Query(ctx,
-		`SELECT id, username, role::text, total_score FROM user_total_score ORDER BY id`)
+func (r *Repository) GetAll(ctx context.Context, active bool) ([]entity.User, error) {
+	rows, err := r.db.With(ctx).Query(ctx, `
+		SELECT u.id, u.username, u.role::text, u.active, COALESCE(v.total_score, 0) AS total_score
+		FROM "user" u
+		LEFT JOIN user_total_score v ON v.id = u.id
+		WHERE u.active = $1
+		ORDER BY u.id`,
+		active)
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +33,7 @@ func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
 	for rows.Next() {
 		var u entity.User
 		var role string
-		if err := rows.Scan(&u.Id, &u.Username, &role, &u.TotalScore); err != nil {
+		if err := rows.Scan(&u.Id, &u.Username, &role, &u.Active, &u.TotalScore); err != nil {
 			return nil, err
 		}
 		u.Role = entity.Role(role)
@@ -40,9 +45,12 @@ func (r *Repository) GetAll(ctx context.Context) ([]entity.User, error) {
 func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
 	var u entity.User
 	var role string
-	err := r.db.With(ctx).QueryRow(ctx,
-		`SELECT id, username, role::text, total_score FROM user_total_score WHERE id = $1`, id).
-		Scan(&u.Id, &u.Username, &role, &u.TotalScore)
+	err := r.db.With(ctx).QueryRow(ctx, `
+		SELECT u.id, u.username, u.role::text, u.active, COALESCE(v.total_score, 0) AS total_score
+		FROM "user" u
+		LEFT JOIN user_total_score v ON v.id = u.id
+		WHERE u.id = $1`, id).
+		Scan(&u.Id, &u.Username, &role, &u.Active, &u.TotalScore)
 	if err != nil {
 		return entity.User{}, err
 	}
@@ -56,20 +64,20 @@ func (r *Repository) GetByUsername(ctx context.Context, username string) (entity
 	var id int
 	var totalScore float64
 	var uname, role, password, hashsalt string
-	var forcePasswordChange bool
+	var forcePasswordChange, active bool
 	err := r.db.With(ctx).QueryRow(ctx, `
 		SELECT u.id, u.username, u.role::text, u.password, u.hashsalt,
-		       u.force_password_change,
+		       u.force_password_change, u.active,
 		       COALESCE(v.total_score, 0) AS total_score
 		FROM "user" u
 		LEFT JOIN user_total_score v ON v.id = u.id
 		WHERE u.username = $1`,
 		username).
-		Scan(&id, &uname, &role, &password, &hashsalt, &forcePasswordChange, &totalScore)
+		Scan(&id, &uname, &role, &password, &hashsalt, &forcePasswordChange, &active, &totalScore)
 	if err != nil {
 		return entity.User{}, err
 	}
-	return entity.NewUser(id, uname, entity.Role(role), password, hashsalt, totalScore, forcePasswordChange), nil
+	return entity.NewUser(id, uname, entity.Role(role), password, hashsalt, totalScore, forcePasswordChange, active), nil
 }
 
 // GetByIdWithCredentials fetches a user with full credentials by ID.
@@ -77,29 +85,31 @@ func (r *Repository) GetByUsername(ctx context.Context, username string) (entity
 func (r *Repository) GetByIdWithCredentials(ctx context.Context, id int) (entity.User, error) {
 	var uid int
 	var username, role, password, hashsalt string
-	var forcePasswordChange bool
+	var forcePasswordChange, active bool
 	err := r.db.With(ctx).QueryRow(ctx, `
-		SELECT id, username, role::text, password, hashsalt, force_password_change
+		SELECT id, username, role::text, password, hashsalt, force_password_change, active
 		FROM "user"
 		WHERE id = $1`, id).
-		Scan(&uid, &username, &role, &password, &hashsalt, &forcePasswordChange)
+		Scan(&uid, &username, &role, &password, &hashsalt, &forcePasswordChange, &active)
 	if err != nil {
 		return entity.User{}, err
 	}
-	return entity.NewUser(uid, username, entity.Role(role), password, hashsalt, 0, forcePasswordChange), nil
+	return entity.NewUser(uid, username, entity.Role(role), password, hashsalt, 0, forcePasswordChange, active), nil
 }
 
 // Create inserts a new user and returns the created record.
 // Set forcePasswordChange = true for admin-created accounts so the user is
 // prompted to set their own password on first login.
-func (r *Repository) Create(ctx context.Context, username, password string, forcePasswordChange bool) (entity.User, error) {
+// Set active = true for admin-created accounts; false for self-registration
+// (requires admin activation before the account can be used).
+func (r *Repository) Create(ctx context.Context, username, password string, forcePasswordChange, active bool) (entity.User, error) {
 	salt := hash.GenerateSalt()
 	hashed := hash.Password(password, salt)
 
 	var id int
 	err := r.db.With(ctx).QueryRow(ctx,
-		`INSERT INTO "user" (username, password, hashsalt, force_password_change) VALUES ($1, $2, $3, $4) RETURNING id`,
-		username, hashed, salt, forcePasswordChange).Scan(&id)
+		`INSERT INTO "user" (username, password, hashsalt, force_password_change, active) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		username, hashed, salt, forcePasswordChange, active).Scan(&id)
 	if err != nil {
 		return entity.User{}, err
 	}
@@ -108,10 +118,17 @@ func (r *Repository) Create(ctx context.Context, username, password string, forc
 	if err != nil {
 		return entity.User{}, err
 	}
-	// GetById queries the view which does not include force_password_change;
-	// carry it forward from the known insert value.
+	// GetById does not include force_password_change; carry it forward from
+	// the known insert value.
 	u.ForcePasswordChange = forcePasswordChange
 	return u, nil
+}
+
+// Activate sets the user's active flag to true, allowing them to log in.
+func (r *Repository) Activate(ctx context.Context, id int) error {
+	_, err := r.db.With(ctx).Exec(ctx,
+		`UPDATE "user" SET active = TRUE WHERE id = $1`, id)
+	return err
 }
 
 // UpdatePassword replaces the user's hashed password and salt, and clears the
@@ -138,4 +155,3 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 	_, err := r.db.With(ctx).Exec(ctx, `DELETE FROM "user" WHERE id = $1`, id)
 	return err
 }
-
