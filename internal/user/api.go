@@ -31,11 +31,27 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 
 	users := rg.Group("/users")
 	users.POST("", r.create)
+	users.PATCH("/:id/activate", r.activate)
 }
 
 // list handles GET /users
+// Accepts an optional ?active query parameter (default: true).
+// Pass ?active=false to retrieve inactive accounts pending activation.
 func (r resource) list(c *gin.Context) {
-	users, err := r.service.GetAll(c.Request.Context())
+	active := true
+	if raw := c.Query("active"); raw != "" {
+		switch raw {
+		case "true":
+			active = true
+		case "false":
+			active = false
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid active: must be true or false"})
+			return
+		}
+	}
+
+	users, err := r.service.GetAll(c.Request.Context(), active)
 	if err != nil {
 		httputil.HandleError(c, err)
 		return
@@ -98,6 +114,19 @@ func (r resource) delete(c *gin.Context) {
 		return
 	}
 	if err := r.service.Delete(c.Request.Context(), id); err != nil {
+		httputil.HandleError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// activate handles PATCH /users/:id/activate (admin only)
+func (r resource) activate(c *gin.Context) {
+	id, ok := httputil.ParseID(c)
+	if !ok {
+		return
+	}
+	if err := r.service.Activate(c.Request.Context(), id); err != nil {
 		httputil.HandleError(c, err)
 		return
 	}

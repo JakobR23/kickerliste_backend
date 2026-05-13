@@ -41,7 +41,11 @@ func (r resource) login(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"message": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		if errors.Is(err, ErrAccountNotActive) {
+			c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 		return
 	}
 
@@ -49,6 +53,8 @@ func (r resource) login(c *gin.Context) {
 }
 
 // register handles POST /auth/register
+// Returns 201 with a message on success — no token is issued until an admin
+// activates the account.
 func (r resource) register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -56,13 +62,12 @@ func (r resource) register(c *gin.Context) {
 		return
 	}
 
-	token, err := r.service.Register(c.Request.Context(), req)
-	if err != nil {
+	if err := r.service.Register(c.Request.Context(), req); err != nil {
 		httputil.HandleError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"token": token})
+	c.JSON(http.StatusCreated, gin.H{"message": "account created, pending admin activation"})
 }
 
 // changePassword handles POST /auth/change-password
