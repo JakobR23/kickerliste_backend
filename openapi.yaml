@@ -289,6 +289,42 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /users/{id}/role:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    patch:
+      tags: [users]
+      summary: Change a user's role (admin only)
+      description: |
+        Updates the `role` field on an existing account. Returns the updated
+        user object. Use this to promote a user to admin or demote an admin
+        back to user.
+      operationId: updateUserRole
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoleRequest"
+      responses:
+        "200":
+          description: OK — returns the updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /users/{id}/activate:
     parameters:
       - $ref: "#/components/parameters/id"
@@ -1030,6 +1066,13 @@ components:
           minLength: 1
           maxLength: 255
       required: [username]
+
+    UpdateRoleRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+      required: [role]
 
     CreateTeamRequest:
       type: object

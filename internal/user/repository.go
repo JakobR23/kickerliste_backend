@@ -155,3 +155,13 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 	_, err := r.db.With(ctx).Exec(ctx, `DELETE FROM "user" WHERE id = $1`, id)
 	return err
 }
+
+// UpdateRole changes the role of an existing user and returns the updated record.
+func (r *Repository) UpdateRole(ctx context.Context, id int, role entity.Role) (entity.User, error) {
+	_, err := r.db.With(ctx).Exec(ctx,
+		`UPDATE "user" SET role = $1::user_role WHERE id = $2`, string(role), id)
+	if err != nil {
+		return entity.User{}, err
+	}
+	return r.GetById(ctx, id)
+}

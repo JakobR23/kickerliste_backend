@@ -32,6 +32,7 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 	users := rg.Group("/users")
 	users.POST("", r.create)
 	users.PATCH("/:id/activate", r.activate)
+	users.PATCH("/:id/role", r.updateRole)
 }
 
 // list handles GET /users
@@ -131,4 +132,23 @@ func (r resource) activate(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// updateRole handles PATCH /users/:id/role (admin only)
+func (r resource) updateRole(c *gin.Context) {
+	id, ok := httputil.ParseID(c)
+	if !ok {
+		return
+	}
+	var req UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	u, err := r.service.UpdateRole(c.Request.Context(), id, req)
+	if err != nil {
+		httputil.HandleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, u)
 }
