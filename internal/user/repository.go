@@ -102,14 +102,14 @@ func (r *Repository) GetByIdWithCredentials(ctx context.Context, id int) (entity
 // prompted to set their own password on first login.
 // Set active = true for admin-created accounts; false for self-registration
 // (requires admin activation before the account can be used).
-func (r *Repository) Create(ctx context.Context, username, password string, forcePasswordChange, active bool) (entity.User, error) {
+func (r *Repository) Create(ctx context.Context, username, password string, role entity.Role, forcePasswordChange, active bool) (entity.User, error) {
 	salt := hash.GenerateSalt()
 	hashed := hash.Password(password, salt)
 
 	var id int
 	err := r.db.With(ctx).QueryRow(ctx,
-		`INSERT INTO "user" (username, password, hashsalt, force_password_change, active) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		username, hashed, salt, forcePasswordChange, active).Scan(&id)
+		`INSERT INTO "user" (username, password, hashsalt, role, force_password_change, active) VALUES ($1, $2, $3, $4::user_role, $5, $6) RETURNING id`,
+		username, hashed, salt, string(role), forcePasswordChange, active).Scan(&id)
 	if err != nil {
 		return entity.User{}, err
 	}

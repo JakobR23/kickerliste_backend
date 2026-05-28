@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/hash"
 	"bierliste_backend/internal/user"
 )
@@ -80,8 +81,9 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 // Register creates an inactive account. No token is returned — the user must
 // wait for an admin to activate the account before they can log in.
 // force_password_change is false because the user chose their own password.
+// Self-registered accounts are always role=user.
 func (s *service) Register(ctx context.Context, req RegisterRequest) error {
-	_, err := s.userRepo.Create(ctx, req.Username, req.Password, false, false)
+	_, err := s.userRepo.Create(ctx, req.Username, req.Password, entity.RoleUser, false, false)
 	return err
 }
 

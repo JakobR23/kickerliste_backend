@@ -18,8 +18,9 @@ type Service interface {
 
 // CreateRequest holds the fields required to register a new user.
 type CreateRequest struct {
-	Username string `json:"username" binding:"required,min=1,max=255"`
-	Password string `json:"password" binding:"required,min=8"`
+	Username string      `json:"username" binding:"required,min=1,max=255"`
+	Password string      `json:"password" binding:"required,min=8"`
+	Role     entity.Role `json:"role"     binding:"omitempty,oneof=admin user"`
 }
 
 // UpdateRequest holds the fields that can be changed on an existing user.
@@ -46,8 +47,13 @@ func (s *service) GetById(ctx context.Context, id int) (entity.User, error) {
 
 // Create is used by admins to create accounts directly. Admin-created accounts
 // are active immediately and require a password change on first login.
+// Role defaults to RoleUser when not supplied in the request.
 func (s *service) Create(ctx context.Context, req CreateRequest) (entity.User, error) {
-	return s.repo.Create(ctx, req.Username, req.Password, true, true)
+	role := req.Role
+	if role == "" {
+		role = entity.RoleUser
+	}
+	return s.repo.Create(ctx, req.Username, req.Password, role, true, true)
 }
 
 func (s *service) Update(ctx context.Context, id int, req UpdateRequest) (entity.User, error) {

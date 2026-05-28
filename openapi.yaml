@@ -1011,6 +1011,7 @@ components:
       description: |
         Creates an account with `forcePasswordChange: true`. The user will be
         required to call `POST /auth/change-password` on first login.
+        `role` defaults to `"user"` when omitted.
       properties:
         username:
           type: string
@@ -1020,6 +1021,11 @@ components:
           type: string
           minLength: 8
           writeOnly: true
+        role:
+          $ref: "#/components/schemas/Role"
+          description: |
+            Role to assign to the new account. Defaults to `"user"` when omitted.
+            Pass `"admin"` to create an admin account.
       required: [username, password]
 
     UpdateUserRequest:
