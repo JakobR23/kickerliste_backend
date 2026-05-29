@@ -20,6 +20,7 @@ import (
 
 func main() {
 	env.LoadConfig()
+	env.ValidateConfig()
 	logger.Setup()
 
 	database.RunMigrations(migrations.FS)

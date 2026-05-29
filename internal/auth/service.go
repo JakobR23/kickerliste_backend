@@ -59,6 +59,9 @@ func NewService(userRepo *user.Repository, secret string) Service {
 
 // Login verifies the credentials and returns a signed JWT on success.
 // Returns ErrAccountNotActive if the account exists but has not been activated.
+//
+// Password migration: accounts whose password was hashed with the legacy
+// SHA-256 scheme are transparently re-hashed with bcrypt on successful login.
 func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 	u, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
@@ -66,8 +69,18 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
-	if hash.Password(req.Password, u.GetHashsalt()) != u.GetPassword() {
-		return "", ErrInvalidCredentials
+	if hash.IsLegacy(u.GetPassword()) {
+		// Legacy SHA-256 path — verify then upgrade to bcrypt.
+		if hash.Password(req.Password, u.GetHashsalt()) != u.GetPassword() {
+			return "", ErrInvalidCredentials
+		}
+		// Best-effort rehash; if it fails the user can still log in today.
+		_ = s.userRepo.UpdatePassword(ctx, u.Id, req.Password)
+	} else {
+		// Current bcrypt path.
+		if !hash.CheckPassword(req.Password, u.GetPassword()) {
+			return "", ErrInvalidCredentials
+		}
 	}
 
 	if !u.Active {
