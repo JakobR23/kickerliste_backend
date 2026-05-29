@@ -60,6 +60,35 @@ func IsDevelopment() bool {
 	return AppEnv.GetValue() == "development"
 }
 
+// ValidateConfig checks that all required environment variables are present and
+// meet minimum requirements. It writes each problem to stderr and exits with
+// code 1 if any are found. Call this once at startup before using any values.
+func ValidateConfig() {
+	var problems []string
+
+	for _, key := range []EnvKey{DatabaseUser, DatabasePassword, DatabaseHost, DatabasePort, DatabaseName} {
+		if key.GetValue() == "" {
+			problems = append(problems, fmt.Sprintf("  %s is required but not set", key))
+		}
+	}
+
+	secret := JWTSecret.GetValue()
+	switch {
+	case secret == "":
+		problems = append(problems, fmt.Sprintf("  %s is required but not set", JWTSecret))
+	case len(secret) < 32:
+		problems = append(problems, fmt.Sprintf("  %s must be at least 32 characters (got %d)", JWTSecret, len(secret)))
+	}
+
+	if len(problems) > 0 {
+		fmt.Fprintln(os.Stderr, "startup configuration error:")
+		for _, p := range problems {
+			fmt.Fprintln(os.Stderr, p)
+		}
+		os.Exit(1)
+	}
+}
+
 // LoadConfig reads key=value pairs from ./env/.env and sets any that are not
 // already present in the environment. Variables already set (e.g. injected by
 // Docker Compose) take precedence over file values, so this is safe to call

@@ -103,13 +103,17 @@ func (r *Repository) GetByIdWithCredentials(ctx context.Context, id int) (entity
 // Set active = true for admin-created accounts; false for self-registration
 // (requires admin activation before the account can be used).
 func (r *Repository) Create(ctx context.Context, username, password string, forcePasswordChange, active bool) (entity.User, error) {
-	salt := hash.GenerateSalt()
-	hashed := hash.Password(password, salt)
+	hashed, err := hash.HashPassword(password)
+	if err != nil {
+		return entity.User{}, err
+	}
 
 	var id int
-	err := r.db.With(ctx).QueryRow(ctx,
-		`INSERT INTO "user" (username, password, hashsalt, force_password_change, active) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		username, hashed, salt, forcePasswordChange, active).Scan(&id)
+	err = r.db.With(ctx).QueryRow(ctx,
+		// hashsalt is unused for bcrypt (salt is embedded in the hash) but the
+		// column is NOT NULL so we store an empty string as a sentinel.
+		`INSERT INTO "user" (username, password, hashsalt, force_password_change, active) VALUES ($1, $2, '', $3, $4) RETURNING id`,
+		username, hashed, forcePasswordChange, active).Scan(&id)
 	if err != nil {
 		return entity.User{}, err
 	}
@@ -131,14 +135,17 @@ func (r *Repository) Activate(ctx context.Context, id int) error {
 	return err
 }
 
-// UpdatePassword replaces the user's hashed password and salt, and clears the
-// force_password_change flag.
+// UpdatePassword replaces the user's hashed password and clears the
+// force_password_change flag. The hashsalt column is set to '' because bcrypt
+// embeds its own salt in the hash string.
 func (r *Repository) UpdatePassword(ctx context.Context, id int, newPassword string) error {
-	salt := hash.GenerateSalt()
-	hashed := hash.Password(newPassword, salt)
-	_, err := r.db.With(ctx).Exec(ctx,
-		`UPDATE "user" SET password = $1, hashsalt = $2, force_password_change = FALSE WHERE id = $3`,
-		hashed, salt, id)
+	hashed, err := hash.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.With(ctx).Exec(ctx,
+		`UPDATE "user" SET password = $1, hashsalt = '', force_password_change = FALSE WHERE id = $2`,
+		hashed, id)
 	return err
 }
 

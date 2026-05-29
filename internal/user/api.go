@@ -20,8 +20,6 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	users := rg.Group("/users")
 	users.GET("", r.list)
 	users.GET("/:id", r.get)
-	users.PUT("/:id", r.update)
-	users.DELETE("/:id", r.delete)
 }
 
 // RegisterAdminHandlers mounts the user routes that are restricted to admins.
@@ -31,6 +29,8 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 
 	users := rg.Group("/users")
 	users.POST("", r.create)
+	users.PUT("/:id", r.update)
+	users.DELETE("/:id", r.delete)
 	users.PATCH("/:id/activate", r.activate)
 }
 
