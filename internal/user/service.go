@@ -12,6 +12,7 @@ type Service interface {
 	GetById(ctx context.Context, id int) (entity.User, error)
 	Create(ctx context.Context, req CreateRequest) (entity.User, error)
 	Update(ctx context.Context, id int, req UpdateRequest) (entity.User, error)
+	UpdateRole(ctx context.Context, id int, req UpdateRoleRequest) (entity.User, error)
 	Delete(ctx context.Context, id int) error
 	Activate(ctx context.Context, id int) error
 }
@@ -25,6 +26,11 @@ type CreateRequest struct {
 // UpdateRequest holds the fields that can be changed on an existing user.
 type UpdateRequest struct {
 	Username string `json:"username" binding:"required,min=1,max=255"`
+}
+
+// UpdateRoleRequest holds the new role for an existing user.
+type UpdateRoleRequest struct {
+	Role entity.Role `json:"role" binding:"required,oneof=admin user"`
 }
 
 type service struct {
@@ -52,6 +58,10 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (entity.User, e
 
 func (s *service) Update(ctx context.Context, id int, req UpdateRequest) (entity.User, error) {
 	return s.repo.Update(ctx, id, req.Username)
+}
+
+func (s *service) UpdateRole(ctx context.Context, id int, req UpdateRoleRequest) (entity.User, error) {
+	return s.repo.UpdateRole(ctx, id, req.Role)
 }
 
 func (s *service) Delete(ctx context.Context, id int) error {
