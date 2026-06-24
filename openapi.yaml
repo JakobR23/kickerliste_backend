@@ -700,7 +700,7 @@ paths:
 
     put:
       tags: [fixtures]
-      summary: Update a fixture (result, scores, value)
+      summary: Update a fixture (admin only)
       description: |
         `team1Score` and `team2Score` must either both be provided or both be omitted.
       operationId: updateFixture
@@ -723,6 +723,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
@@ -734,7 +736,7 @@ paths:
 
     delete:
       tags: [fixtures]
-      summary: Delete a fixture
+      summary: Delete a fixture (admin only)
       operationId: deleteFixture
       security:
         - BearerAuth: []
@@ -743,6 +745,8 @@ paths:
           description: No Content
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
