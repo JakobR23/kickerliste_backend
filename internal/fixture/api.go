@@ -24,8 +24,6 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	fixtures.GET("", r.list)
 	fixtures.POST("", r.create)
 	fixtures.GET("/:id", r.get)
-	fixtures.PUT("/:id", r.update)
-	fixtures.DELETE("/:id", r.delete)
 }
 
 // RegisterAdminHandlers mounts the fixture routes restricted to admins.
@@ -34,6 +32,8 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 	r := resource{service}
 
 	fixtures := rg.Group("/fixtures")
+	fixtures.PUT("/:id", r.update)
+	fixtures.DELETE("/:id", r.delete)
 	fixtures.PATCH("/:id/approve", r.approve)
 	fixtures.PATCH("/:id/reject", r.reject)
 }
