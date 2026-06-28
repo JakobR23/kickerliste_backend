@@ -1,7 +1,6 @@
 package scoreadjustment
 
 import (
-	"errors"
 	"net/http"
 
 	"bierliste_backend/internal/auth"
@@ -44,19 +43,14 @@ func (r resource) create(c *gin.Context) {
 	if !ok {
 		return
 	}
-	adminUserId := c.MustGet(auth.UserIDKey).(int)
+	adminUserId := auth.UserID(c)
 
 	var req CreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	a, err := r.service.Create(c.Request.Context(), adminUserId, targetUserId, req)
 	if err != nil {
-		if errors.Is(err, ErrZeroAmount) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
 		httputil.HandleError(c, err)
 		return
 	}

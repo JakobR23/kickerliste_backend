@@ -2,13 +2,14 @@ package scoreadjustment
 
 import (
 	"context"
-	"errors"
+	"net/http"
 
 	"bierliste_backend/internal/entity"
+	"bierliste_backend/internal/httputil"
 )
 
 // ErrZeroAmount is returned when an adjustment of zero is submitted.
-var ErrZeroAmount = errors.New("amount must not be zero")
+var ErrZeroAmount = httputil.NewStatusError(http.StatusUnprocessableEntity, "amount must not be zero")
 
 // Service encapsulates business logic for manual score adjustments.
 type Service interface {

@@ -6,7 +6,17 @@ import (
 	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/hash"
+
+	"github.com/jackc/pgx/v5"
 )
+
+// userSelectCols is the shared SELECT/JOIN for loading the public user fields
+// (no credentials) together with the derived total score. Callers append their
+// own WHERE / ORDER BY clause.
+const userSelectCols = `
+	SELECT u.id, u.username, u.role::text, u.active, COALESCE(v.total_score, 0) AS total_score
+	FROM "user" u
+	LEFT JOIN user_total_score v ON v.id = u.id`
 
 type Repository struct {
 	db *database.DB
@@ -16,14 +26,23 @@ func NewRepository(db *database.DB) *Repository {
 	return &Repository{db: db}
 }
 
+// scanUser reads one row produced by userSelectCols into an entity.User.
+// pgx.Rows also satisfies pgx.Row, so this works both inside a Query loop and
+// for a single QueryRow result.
+func scanUser(row pgx.Row) (entity.User, error) {
+	var u entity.User
+	var role string
+	if err := row.Scan(&u.Id, &u.Username, &role, &u.Active, &u.TotalScore); err != nil {
+		return entity.User{}, err
+	}
+	u.Role = entity.Role(role)
+	return u, nil
+}
+
 func (r *Repository) GetAll(ctx context.Context, active bool) ([]entity.User, error) {
-	rows, err := r.db.With(ctx).Query(ctx, `
-		SELECT u.id, u.username, u.role::text, u.active, COALESCE(v.total_score, 0) AS total_score
-		FROM "user" u
-		LEFT JOIN user_total_score v ON v.id = u.id
+	rows, err := r.db.With(ctx).Query(ctx, userSelectCols+`
 		WHERE u.active = $1
-		ORDER BY u.id`,
-		active)
+		ORDER BY u.id`, active)
 	if err != nil {
 		return nil, err
 	}
@@ -31,31 +50,17 @@ func (r *Repository) GetAll(ctx context.Context, active bool) ([]entity.User, er
 
 	var users []entity.User
 	for rows.Next() {
-		var u entity.User
-		var role string
-		if err := rows.Scan(&u.Id, &u.Username, &role, &u.Active, &u.TotalScore); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
-		u.Role = entity.Role(role)
 		users = append(users, u)
 	}
 	return users, rows.Err()
 }
 
 func (r *Repository) GetById(ctx context.Context, id int) (entity.User, error) {
-	var u entity.User
-	var role string
-	err := r.db.With(ctx).QueryRow(ctx, `
-		SELECT u.id, u.username, u.role::text, u.active, COALESCE(v.total_score, 0) AS total_score
-		FROM "user" u
-		LEFT JOIN user_total_score v ON v.id = u.id
-		WHERE u.id = $1`, id).
-		Scan(&u.Id, &u.Username, &role, &u.Active, &u.TotalScore)
-	if err != nil {
-		return entity.User{}, err
-	}
-	u.Role = entity.Role(role)
-	return u, nil
+	return scanUser(r.db.With(ctx).QueryRow(ctx, userSelectCols+` WHERE u.id = $1`, id))
 }
 
 // GetByUsername fetches a user with full credentials for authentication.

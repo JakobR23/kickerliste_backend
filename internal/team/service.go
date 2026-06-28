@@ -2,15 +2,16 @@ package team
 
 import (
 	"context"
-	"errors"
+	"net/http"
 
 	"bierliste_backend/internal/entity"
+	"bierliste_backend/internal/httputil"
 	"bierliste_backend/internal/teammember"
 	"bierliste_backend/internal/user"
 )
 
 // ErrTeamFull is returned when a team already has the maximum of 2 members.
-var ErrTeamFull = errors.New("team already has 2 members")
+var ErrTeamFull = httputil.NewStatusError(http.StatusConflict, "team already has 2 members")
 
 // Service encapsulates the business logic for team and team-member management.
 type Service interface {
