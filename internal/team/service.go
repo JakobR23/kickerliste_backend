@@ -20,7 +20,6 @@ type Service interface {
 	Update(ctx context.Context, id int, req UpdateRequest) (entity.Team, error)
 	Delete(ctx context.Context, id int) error
 
-	GetMembers(ctx context.Context, teamId int) ([]entity.User, error)
 	AddMember(ctx context.Context, teamId int, req AddMemberRequest) (entity.User, error)
 	RemoveMember(ctx context.Context, teamId, userId int) error
 }
@@ -73,25 +72,6 @@ func (s *service) Update(ctx context.Context, id int, req UpdateRequest) (entity
 
 func (s *service) Delete(ctx context.Context, id int) error {
 	return s.teamRepo.Delete(ctx, id)
-}
-
-func (s *service) GetMembers(ctx context.Context, teamId int) ([]entity.User, error) {
-	if _, err := s.teamRepo.GetById(ctx, teamId); err != nil {
-		return nil, err
-	}
-	members, err := s.tmRepo.GetByTeamId(ctx, teamId)
-	if err != nil {
-		return nil, err
-	}
-	users := make([]entity.User, 0, len(members))
-	for _, m := range members {
-		u, err := s.userRepo.GetById(ctx, m.UserId)
-		if err != nil {
-			return nil, err
-		}
-		users = append(users, u)
-	}
-	return users, nil
 }
 
 func (s *service) AddMember(ctx context.Context, teamId int, req AddMemberRequest) (entity.User, error) {

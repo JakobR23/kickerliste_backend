@@ -24,7 +24,6 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 	teams.POST("", r.create)
 	teams.GET("/:id", r.get)
 	teams.PUT("/:id", r.update)
-	teams.GET("/:id/members", r.listMembers)
 	teams.POST("/:id/members", r.addMember)
 }
 
@@ -107,20 +106,6 @@ func (r resource) delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
-}
-
-// listMembers handles GET /teams/:id/members
-func (r resource) listMembers(c *gin.Context) {
-	id, ok := httputil.ParseID(c)
-	if !ok {
-		return
-	}
-	members, err := r.service.GetMembers(c.Request.Context(), id)
-	if err != nil {
-		httputil.HandleError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, members)
 }
 
 // addMember handles POST /teams/:id/members

@@ -523,26 +523,6 @@ paths:
     parameters:
       - $ref: "#/components/parameters/id"
 
-    get:
-      tags: [teams]
-      summary: List members of a team
-      operationId: listTeamMembers
-      security:
-        - BearerAuth: []
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/User"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
     post:
       tags: [teams]
       summary: Add a user to a team (max 2 members enforced at application layer)
@@ -930,7 +910,12 @@ components:
           type: string
           format: date-time
           readOnly: true
-      required: [id, created_at]
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+          readOnly: true
+      required: [id, created_at, members]
 
     Fixture:
       type: object
