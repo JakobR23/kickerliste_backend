@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/hash"
 	"bierliste_backend/internal/httputil"
 	"bierliste_backend/internal/user"
@@ -58,6 +59,17 @@ func NewService(userRepo *user.Repository, secret string) Service {
 	return &service{userRepo: userRepo, secret: secret}
 }
 
+// verifyPassword reports whether plaintext matches the user's stored password.
+// It handles both bcrypt hashes and legacy SHA-256 hashes (which use the
+// separate hashsalt column). Both Login and ChangePassword use this so their
+// verification logic cannot drift apart.
+func verifyPassword(plaintext string, u entity.User) bool {
+	if hash.IsLegacy(u.GetPassword()) {
+		return hash.Password(plaintext, u.GetHashsalt()) == u.GetPassword()
+	}
+	return hash.CheckPassword(plaintext, u.GetPassword())
+}
+
 // Login verifies the credentials and returns a signed JWT on success.
 // Returns ErrAccountNotActive if the account exists but has not been activated.
 //
@@ -70,18 +82,13 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
+	if !verifyPassword(req.Password, u) {
+		return "", ErrInvalidCredentials
+	}
+	// Legacy SHA-256 accounts are transparently upgraded to bcrypt on a
+	// successful login. Best-effort; if it fails the user can still log in today.
 	if hash.IsLegacy(u.GetPassword()) {
-		// Legacy SHA-256 path — verify then upgrade to bcrypt.
-		if hash.Password(req.Password, u.GetHashsalt()) != u.GetPassword() {
-			return "", ErrInvalidCredentials
-		}
-		// Best-effort rehash; if it fails the user can still log in today.
 		_ = s.userRepo.UpdatePassword(ctx, u.Id, req.Password)
-	} else {
-		// Current bcrypt path.
-		if !hash.CheckPassword(req.Password, u.GetPassword()) {
-			return "", ErrInvalidCredentials
-		}
 	}
 
 	if !u.Active {
@@ -107,7 +114,7 @@ func (s *service) ChangePassword(ctx context.Context, userId int, req ChangePass
 		return "", err
 	}
 
-	if hash.Password(req.CurrentPassword, u.GetHashsalt()) != u.GetPassword() {
+	if !verifyPassword(req.CurrentPassword, u) {
 		return "", ErrPasswordMismatch
 	}
 
