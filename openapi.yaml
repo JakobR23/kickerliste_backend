@@ -454,6 +454,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: One of the supplied member user IDs does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /teams/{id}:
     parameters:
@@ -1069,6 +1075,17 @@ components:
         name:
           type: string
           nullable: true
+        members:
+          type: array
+          description: |
+            Optional list of user IDs to add as team members on creation.
+            At most 2, must be distinct and non-zero. The members are created
+            atomically with the team; an unknown user ID rolls the whole
+            creation back.
+          items:
+            type: integer
+          maxItems: 2
+          uniqueItems: true
 
     UpdateTeamRequest:
       type: object

@@ -43,7 +43,7 @@ func main() {
 
 	authService := auth.NewService(users, jwtSecret)
 	userService := userRepo.NewService(users)
-	teamService := teamRepo.NewService(teams, tms, users)
+	teamService := teamRepo.NewService(db, teams, tms, users)
 	fixtureService := fixtureRepo.NewService(fixtures)
 	adjustmentService := adjustmentRepo.NewService(adjustments)
 
