@@ -15,7 +15,6 @@ var ErrTeamFull = errors.New("team already has 2 members")
 // Service encapsulates the business logic for team and team-member management.
 type Service interface {
 	GetAll(ctx context.Context) ([]entity.Team, error)
-	GetAllWithMembers(ctx context.Context) ([]entity.TeamWithMembers, error)
 	GetById(ctx context.Context, id int) (entity.Team, error)
 	Create(ctx context.Context, req CreateRequest) (entity.Team, error)
 	Update(ctx context.Context, id int, req UpdateRequest) (entity.Team, error)
@@ -58,10 +57,6 @@ func NewService(teamRepo *Repository, tmRepo *teammember.Repository, userRepo *u
 
 func (s *service) GetAll(ctx context.Context) ([]entity.Team, error) {
 	return s.teamRepo.GetAll(ctx)
-}
-
-func (s *service) GetAllWithMembers(ctx context.Context) ([]entity.TeamWithMembers, error) {
-	return s.teamRepo.GetAllWithMembers(ctx)
 }
 
 func (s *service) GetById(ctx context.Context, id int) (entity.Team, error) {
