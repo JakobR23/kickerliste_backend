@@ -9,3 +9,8 @@ type Team struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type TeamWithMembers struct {
+	Team
+	Members []User `json:"members"`
+}

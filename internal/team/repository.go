@@ -2,6 +2,7 @@ package team
 
 import (
 	"context"
+	"time"
 
 	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
@@ -73,4 +74,69 @@ func (r *Repository) Update(ctx context.Context, id int, name *string) (entity.T
 func (r *Repository) Delete(ctx context.Context, id int) error {
 	_, err := r.db.With(ctx).Exec(ctx, `DELETE FROM team WHERE id = $1`, id)
 	return err
+}
+
+// GetAllWithMembers returns every team together with its members in a single
+// query. Teams with no members are included with an empty Members slice.
+func (r *Repository) GetAllWithMembers(ctx context.Context) ([]entity.TeamWithMembers, error) {
+	rows, err := r.db.With(ctx).Query(ctx, `
+		SELECT t.id, t.name, t.created_at,
+		       u.id, u.username, u.role::text, u.active,
+		       COALESCE(v.total_score, 0) AS total_score
+		FROM team t
+		LEFT JOIN team_member tm ON tm.team_id = t.id
+		LEFT JOIN "user" u ON u.id = tm.user_id
+		LEFT JOIN user_total_score v ON v.id = u.id
+		ORDER BY t.id, u.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []entity.TeamWithMembers
+	index := map[int]int{} // team id → index in result
+
+	for rows.Next() {
+		var teamId int
+		var teamName *string
+		var teamCreatedAt time.Time
+		var uid *int
+		var username, role *string
+		var active *bool
+		var totalScore *float64
+
+		if err := rows.Scan(
+			&teamId, &teamName, &teamCreatedAt,
+			&uid, &username, &role, &active, &totalScore,
+		); err != nil {
+			return nil, err
+		}
+
+		// Upsert team into result slice.
+		idx, seen := index[teamId]
+		if !seen {
+			t := entity.TeamWithMembers{Members: []entity.User{}}
+			t.Id = teamId
+			if teamName != nil {
+				t.Name = *teamName
+			}
+			t.CreatedAt = teamCreatedAt
+			result = append(result, t)
+			idx = len(result) - 1
+			index[teamId] = idx
+		}
+
+		// Append member if the LEFT JOIN produced a row.
+		if uid != nil {
+			u := entity.User{
+				Id:         *uid,
+				Username:   *username,
+				Role:       entity.Role(*role),
+				Active:     *active,
+				TotalScore: *totalScore,
+			}
+			result[idx].Members = append(result[idx].Members, u)
+		}
+	}
+	return result, rows.Err()
 }

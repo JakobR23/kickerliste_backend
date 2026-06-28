@@ -21,6 +21,7 @@ func RegisterHandlers(rg *gin.RouterGroup, service Service) {
 
 	teams := rg.Group("/teams")
 	teams.GET("", r.list)
+	teams.GET("/with-members", r.listWithMembers)
 	teams.POST("", r.create)
 	teams.GET("/:id", r.get)
 	teams.PUT("/:id", r.update)
@@ -36,6 +37,16 @@ func RegisterAdminHandlers(rg *gin.RouterGroup, service Service) {
 	teams := rg.Group("/teams")
 	teams.DELETE("/:id", r.delete)
 	teams.DELETE("/:id/members/:userId", r.removeMember)
+}
+
+// listWithMembers handles GET /teams/with-members
+func (r resource) listWithMembers(c *gin.Context) {
+	teams, err := r.service.GetAllWithMembers(c.Request.Context())
+	if err != nil {
+		httputil.HandleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, teams)
 }
 
 // list handles GET /teams
