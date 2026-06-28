@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/httputil"
 	"bierliste_backend/internal/teammember"
@@ -26,8 +27,11 @@ type Service interface {
 }
 
 // CreateRequest holds the fields required to create a new team.
+// Members is an optional list of user IDs to add as team members on creation.
+// A team may have at most 2 members and the IDs must be distinct and non-zero.
 type CreateRequest struct {
-	Name *string `json:"name"`
+	Name    *string `json:"name"`
+	Members []int   `json:"members" binding:"max=2,unique,dive,required"`
 }
 
 // UpdateRequest holds the fields that can be changed on an existing team.
@@ -41,14 +45,18 @@ type AddMemberRequest struct {
 }
 
 type service struct {
+	db       *database.DB
 	teamRepo *Repository
 	tmRepo   *teammember.Repository
 	userRepo *user.Repository
 }
 
-// NewService creates a Service backed by the given repositories.
-func NewService(teamRepo *Repository, tmRepo *teammember.Repository, userRepo *user.Repository) Service {
+// NewService creates a Service backed by the given repositories. db is used to
+// run multi-statement operations (e.g. creating a team with members) in a
+// single transaction.
+func NewService(db *database.DB, teamRepo *Repository, tmRepo *teammember.Repository, userRepo *user.Repository) Service {
 	return &service{
+		db:       db,
 		teamRepo: teamRepo,
 		tmRepo:   tmRepo,
 		userRepo: userRepo,
@@ -63,8 +71,32 @@ func (s *service) GetById(ctx context.Context, id int) (entity.Team, error) {
 	return s.teamRepo.GetById(ctx, id)
 }
 
+// Create creates a team and, if any member user IDs are supplied, adds them as
+// team members in the same transaction. If any member insert fails (e.g. an
+// unknown user ID or a duplicate), the whole operation is rolled back so no
+// partially-populated team is left behind. The returned team includes its
+// members.
 func (s *service) Create(ctx context.Context, req CreateRequest) (entity.Team, error) {
-	return s.teamRepo.Create(ctx, req.Name)
+	var created entity.Team
+	err := s.db.Transactional(ctx, func(ctx context.Context) error {
+		team, err := s.teamRepo.Create(ctx, req.Name)
+		if err != nil {
+			return err
+		}
+		for _, userId := range req.Members {
+			if _, err := s.tmRepo.Create(ctx, team.Id, userId); err != nil {
+				return err
+			}
+		}
+		// Reload within the transaction so the response reflects the members
+		// that were just inserted.
+		created, err = s.teamRepo.GetById(ctx, team.Id)
+		return err
+	})
+	if err != nil {
+		return entity.Team{}, err
+	}
+	return created, nil
 }
 
 func (s *service) Update(ctx context.Context, id int, req UpdateRequest) (entity.Team, error) {
