@@ -2,21 +2,22 @@ package fixture
 
 import (
 	"context"
-	"errors"
+	"net/http"
 	"time"
 
 	"bierliste_backend/internal/entity"
+	"bierliste_backend/internal/httputil"
 )
 
 // ErrSameTeam is returned when both sides of a fixture reference the same team.
-var ErrSameTeam = errors.New("team1Id and team2Id must be different")
+var ErrSameTeam = httputil.NewStatusError(http.StatusUnprocessableEntity, "team1Id and team2Id must be different")
 
 // ErrScoresInconsistent is returned when only one score is provided.
-var ErrScoresInconsistent = errors.New("team1Score and team2Score must both be set or both be null")
+var ErrScoresInconsistent = httputil.NewStatusError(http.StatusUnprocessableEntity, "team1Score and team2Score must both be set or both be null")
 
 // ErrFixtureNotPending is returned when approve or reject is called on a
 // fixture that is no longer in the pending state.
-var ErrFixtureNotPending = errors.New("fixture is not pending")
+var ErrFixtureNotPending = httputil.NewStatusError(http.StatusConflict, "fixture is not pending")
 
 // Service encapsulates the business logic for fixture management.
 type Service interface {

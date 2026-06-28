@@ -38,14 +38,22 @@ func New(pool *pgxpool.Pool) *DB {
 	return &DB{conn: pool}
 }
 
-// connStr builds the base postgres:// connection string from environment variables.
-func connStr() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+// dsn builds a connection string with the given URL scheme from environment
+// variables. The credential list lives here only — callers pick the scheme
+// (e.g. "postgres" for pgx, "pgx5" for golang-migrate).
+func dsn(scheme string) string {
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s",
+		scheme,
 		env.DatabaseUser.GetValue(),
 		env.DatabasePassword.GetValue(),
 		env.DatabaseHost.GetValue(),
 		env.DatabasePort.GetValue(),
 		env.DatabaseName.GetValue())
+}
+
+// connStr builds the base postgres:// connection string for direct pgx use.
+func connStr() string {
+	return dsn("postgres")
 }
 
 // InitializeConnection creates and returns a connection pool.
@@ -79,12 +87,7 @@ func InitializeConnection() *pgxpool.Pool {
 //  In production a dirty migration that cannot be non-destructively recovered
 //  causes an immediate fatal, forcing a human operator to resolve it manually.
 func RunMigrations(migrationsFS fs.FS) {
-	dbURL := fmt.Sprintf("pgx5://%s:%s@%s:%s/%s",
-		env.DatabaseUser.GetValue(),
-		env.DatabasePassword.GetValue(),
-		env.DatabaseHost.GetValue(),
-		env.DatabasePort.GetValue(),
-		env.DatabaseName.GetValue())
+	dbURL := dsn("pgx5")
 
 	newMigrate := func() *migrate.Migrate {
 		d, err := iofs.New(migrationsFS, ".")

@@ -1,7 +1,6 @@
 package team
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -64,8 +63,7 @@ func (r resource) get(c *gin.Context) {
 // create handles POST /teams
 func (r resource) create(c *gin.Context) {
 	var req CreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	t, err := r.service.Create(c.Request.Context(), req)
@@ -83,8 +81,7 @@ func (r resource) update(c *gin.Context) {
 		return
 	}
 	var req UpdateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	t, err := r.service.Update(c.Request.Context(), id, req)
@@ -115,16 +112,11 @@ func (r resource) addMember(c *gin.Context) {
 		return
 	}
 	var req AddMemberRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	u, err := r.service.AddMember(c.Request.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, ErrTeamFull) {
-			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
-			return
-		}
 		httputil.HandleError(c, err)
 		return
 	}

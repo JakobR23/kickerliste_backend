@@ -2,23 +2,24 @@ package auth
 
 import (
 	"context"
-	"errors"
+	"net/http"
 
 	"bierliste_backend/internal/hash"
+	"bierliste_backend/internal/httputil"
 	"bierliste_backend/internal/user"
 )
 
 // ErrInvalidCredentials is returned for both unknown username and wrong password
 // so callers cannot distinguish the two (prevents user-enumeration attacks).
-var ErrInvalidCredentials = errors.New("invalid username or password")
+var ErrInvalidCredentials = httputil.NewStatusError(http.StatusUnauthorized, "invalid username or password")
 
 // ErrPasswordMismatch is returned when the supplied current password does not
 // match the one stored for the user during a change-password request.
-var ErrPasswordMismatch = errors.New("current password is incorrect")
+var ErrPasswordMismatch = httputil.NewStatusError(http.StatusUnprocessableEntity, "current password is incorrect")
 
 // ErrAccountNotActive is returned when a user attempts to log in but their
 // account has not yet been activated by an admin.
-var ErrAccountNotActive = errors.New("account pending activation")
+var ErrAccountNotActive = httputil.NewStatusError(http.StatusForbidden, "account pending activation")
 
 // Service handles login, registration, and credential management.
 type Service interface {

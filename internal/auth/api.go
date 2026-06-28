@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"errors"
 	"net/http"
 
 	"bierliste_backend/internal/httputil"
@@ -30,22 +29,13 @@ func RegisterProtectedHandlers(rg *gin.RouterGroup, service Service) {
 // login handles POST /auth/login
 func (r resource) login(c *gin.Context) {
 	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 
 	token, err := r.service.Login(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, ErrInvalidCredentials) {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": err.Error()})
-			return
-		}
-		if errors.Is(err, ErrAccountNotActive) {
-			c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		httputil.HandleError(c, err)
 		return
 	}
 
@@ -57,8 +47,7 @@ func (r resource) login(c *gin.Context) {
 // activates the account.
 func (r resource) register(c *gin.Context) {
 	var req RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 
@@ -72,21 +61,16 @@ func (r resource) register(c *gin.Context) {
 
 // changePassword handles POST /auth/change-password
 func (r resource) changePassword(c *gin.Context) {
-	userId := c.MustGet(UserIDKey).(int)
+	userId := UserID(c)
 
 	var req ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 
 	token, err := r.service.ChangePassword(c.Request.Context(), userId, req)
 	if err != nil {
-		if errors.Is(err, ErrPasswordMismatch) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		httputil.HandleError(c, err)
 		return
 	}
 

@@ -19,6 +19,14 @@ const UserRoleKey = "userRole"
 // authenticated user must change their password before doing anything else.
 const ForcePasswordChangeKey = "forcePasswordChange"
 
+// UserID returns the authenticated user's ID, which Middleware stores in the
+// context. It panics if the request did not pass through Middleware — the same
+// contract as the c.MustGet call it replaces, so it must only be used on routes
+// behind the auth middleware.
+func UserID(c *gin.Context) int {
+	return c.MustGet(UserIDKey).(int)
+}
+
 // Middleware returns a Gin handler that validates the Bearer JWT on every request.
 // On success it stores the user ID, role, and force-password-change flag in the
 // context and calls Next. On failure it aborts with 401.

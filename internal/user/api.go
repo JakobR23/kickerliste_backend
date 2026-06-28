@@ -77,8 +77,7 @@ func (r resource) get(c *gin.Context) {
 // create handles POST /users (admin only)
 func (r resource) create(c *gin.Context) {
 	var req CreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	u, err := r.service.Create(c.Request.Context(), req)
@@ -96,8 +95,7 @@ func (r resource) update(c *gin.Context) {
 		return
 	}
 	var req UpdateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	u, err := r.service.Update(c.Request.Context(), id, req)
@@ -141,8 +139,7 @@ func (r resource) updateRole(c *gin.Context) {
 		return
 	}
 	var req UpdateRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if !httputil.BindJSON(c, &req) {
 		return
 	}
 	u, err := r.service.UpdateRole(c.Request.Context(), id, req)
