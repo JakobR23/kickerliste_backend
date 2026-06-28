@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"bierliste_backend/internal/database"
 	"bierliste_backend/internal/entity"
 	"bierliste_backend/internal/httputil"
 	"bierliste_backend/internal/teammember"
@@ -44,19 +43,26 @@ type AddMemberRequest struct {
 	UserId int `json:"userId" binding:"required"`
 }
 
+// txRunner runs a function within a database transaction. *database.DB satisfies
+// it. The service depends on this narrow interface rather than the concrete DB
+// wrapper so it can demarcate a unit of work without gaining direct data access.
+type txRunner interface {
+	Transactional(ctx context.Context, fn func(context.Context) error) error
+}
+
 type service struct {
-	db       *database.DB
+	tx       txRunner
 	teamRepo *Repository
 	tmRepo   *teammember.Repository
 	userRepo *user.Repository
 }
 
-// NewService creates a Service backed by the given repositories. db is used to
+// NewService creates a Service backed by the given repositories. tx is used to
 // run multi-statement operations (e.g. creating a team with members) in a
 // single transaction.
-func NewService(db *database.DB, teamRepo *Repository, tmRepo *teammember.Repository, userRepo *user.Repository) Service {
+func NewService(tx txRunner, teamRepo *Repository, tmRepo *teammember.Repository, userRepo *user.Repository) Service {
 	return &service{
-		db:       db,
+		tx:       tx,
 		teamRepo: teamRepo,
 		tmRepo:   tmRepo,
 		userRepo: userRepo,
@@ -78,7 +84,7 @@ func (s *service) GetById(ctx context.Context, id int) (entity.Team, error) {
 // members.
 func (s *service) Create(ctx context.Context, req CreateRequest) (entity.Team, error) {
 	var created entity.Team
-	err := s.db.Transactional(ctx, func(ctx context.Context) error {
+	err := s.tx.Transactional(ctx, func(ctx context.Context) error {
 		team, err := s.teamRepo.Create(ctx, req.Name)
 		if err != nil {
 			return err
