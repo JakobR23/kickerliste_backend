@@ -455,6 +455,25 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /teams/with-members:
+    get:
+      tags: [teams]
+      summary: List all teams with their members
+      operationId: listTeamsWithMembers
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamWithMembers"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /teams/{id}:
     parameters:
       - $ref: "#/components/parameters/id"
@@ -931,6 +950,17 @@ components:
           format: date-time
           readOnly: true
       required: [id, created_at]
+
+    TeamWithMembers:
+      allOf:
+        - $ref: "#/components/schemas/Team"
+        - type: object
+          properties:
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/User"
+          required: [members]
 
     Fixture:
       type: object
