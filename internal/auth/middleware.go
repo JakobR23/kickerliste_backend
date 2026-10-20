@@ -86,3 +86,12 @@ func PasswordChangedMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// UserRole returns the authenticated user's role, which Middleware stores in the
+// context. Returns the zero-value role if absent; use only on routes behind
+// Middleware.
+func UserRole(c *gin.Context) entity.Role {
+	role, _ := c.Get(UserRoleKey)
+	r, _ := role.(entity.Role)
+	return r
+}
