@@ -10,6 +10,7 @@ import (
 	"bierliste_backend/internal/logger"
 	"bierliste_backend/internal/router"
 	adjustmentRepo "bierliste_backend/internal/scoreadjustment"
+	scorehistoryRepo "bierliste_backend/internal/scorehistory"
 	teamRepo "bierliste_backend/internal/team"
 	"bierliste_backend/internal/teammember"
 	userRepo "bierliste_backend/internal/user"
@@ -35,6 +36,7 @@ func main() {
 	tms := teammember.NewRepository(db)
 	fixtures := fixtureRepo.NewRepository(db)
 	adjustments := adjustmentRepo.NewRepository(db)
+	scoreHistory := scorehistoryRepo.NewRepository(db)
 
 	jwtSecret := env.JWTSecret.GetValue()
 	authMiddleware := auth.Middleware(jwtSecret)
@@ -46,6 +48,7 @@ func main() {
 	teamService := teamRepo.NewService(db, teams, tms, users)
 	fixtureService := fixtureRepo.NewService(fixtures)
 	adjustmentService := adjustmentRepo.NewService(adjustments)
+	scoreHistoryService := scorehistoryRepo.NewService(scoreHistory, users)
 
 	r := router.New(
 		func(rg *gin.RouterGroup) {
@@ -62,6 +65,7 @@ func main() {
 			userRepo.RegisterHandlers(normal, userService)
 			teamRepo.RegisterHandlers(normal, teamService)
 			fixtureRepo.RegisterHandlers(normal, fixtureService)
+			scorehistoryRepo.RegisterHandlers(normal, scoreHistoryService)
 
 			// Authenticated + password changed + admin only.
 			admin := normal.Group("", adminMiddleware)

@@ -410,6 +410,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /users/{id}/score-history:
+    parameters:
+      - $ref: "#/components/parameters/id"
+
+    get:
+      tags: [users]
+      summary: Get a user's score history (self or admin)
+      description: |
+        Ordered list of score-changing events (approved fixtures and manual
+        score adjustments) for the user, oldest first, each with the cumulative
+        running total after it. The last entry's `runningTotal` equals the
+        user's `totalScore`. Accessible to the user themselves and to admins;
+        a non-admin requesting another user's history receives `403`.
+      operationId: getScoreHistory
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK - events oldest first (empty array if none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreHistoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ------------------------------------------------------------------ teams
 
   /teams:
@@ -956,6 +988,62 @@ components:
           readOnly: true
           description: ID of the user who submitted this fixture
       required: [id, team1Id, team2Id, result, playedAt, value, status]
+
+    ScoreHistoryEntry:
+      oneOf:
+        - $ref: "#/components/schemas/FixtureScoreHistoryEntry"
+        - $ref: "#/components/schemas/AdjustmentScoreHistoryEntry"
+      discriminator:
+        propertyName: type
+        mapping:
+          fixture: "#/components/schemas/FixtureScoreHistoryEntry"
+          adjustment: "#/components/schemas/AdjustmentScoreHistoryEntry"
+
+    FixtureScoreHistoryEntry:
+      type: object
+      description: A score change from an approved fixture (win or loss).
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: Timestamp of the event (the fixture's playedAt).
+        delta:
+          type: number
+          format: double
+          description: Points gained (win) or lost (loss), value split by team size.
+        runningTotal:
+          type: number
+          format: double
+          description: Cumulative score after this event.
+        type:
+          type: string
+          enum: [fixture]
+        fixtureId:
+          type: integer
+      required: [at, delta, runningTotal, type, fixtureId]
+
+    AdjustmentScoreHistoryEntry:
+      type: object
+      description: A score change from a manual admin adjustment.
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: Timestamp of the event (the adjustment's createdAt).
+        delta:
+          type: number
+          format: double
+          description: Points added or removed (may be negative).
+        runningTotal:
+          type: number
+          format: double
+          description: Cumulative score after this event.
+        type:
+          type: string
+          enum: [adjustment]
+        reason:
+          type: string
+      required: [at, delta, runningTotal, type, reason]
 
     ScoreAdjustment:
       type: object
